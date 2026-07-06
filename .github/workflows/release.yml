@@ -83,6 +83,7 @@ jobs:
         run: |
           NAME="kubectl-sheep_${{ matrix.goos }}_${{ matrix.goarch }}"
           mkdir -p "dist/${NAME}"
+          cp LICENSE "dist/${NAME}/LICENSE"
 
           if [ "${{ matrix.goos }}" = "windows" ]; then
             mv dist/kubectl-sheep.exe "dist/${NAME}/kubectl-sheep.exe"
@@ -90,7 +91,7 @@ jobs:
           else
             mv dist/kubectl-sheep "dist/${NAME}/kubectl-sheep"
             chmod +x "dist/${NAME}/kubectl-sheep"
-            tar -czf "dist/${NAME}.tar.gz" -C "dist/${NAME}" kubectl-sheep
+            tar -czf "dist/${NAME}.tar.gz" -C "dist/${NAME}" kubectl-sheep LICENSE
           fi
 
       - name: Upload build artifact

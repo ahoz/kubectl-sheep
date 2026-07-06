@@ -17,7 +17,7 @@ sha256_file() {
   fi
 }
 
-  platform_block() {
+platform_block() {
   local os="$1"
   local arch="$2"
   local archive="${DIST}/kubectl-sheep_${os}_${arch}.tar.gz"
@@ -48,6 +48,13 @@ metadata:
   name: sheep
 spec:
   version: ${TAG}
+  homepage: https://github.com/${REPO}
+  shortDescription: Fetch and manage kubeconfigs from Rancher-managed clusters
+  description: |
+    A kubectl plugin to manage multiple Rancher instances, list their downstream
+    clusters, and fetch/refresh kubeconfigs individually or in bulk. Rancher API
+    tokens can be stored either as plaintext or encrypted (passphrase-protected file
+    backend), selectable per instance.
   platforms:
 EOF
 
@@ -55,13 +62,3 @@ platform_block linux amd64
 platform_block linux arm64
 platform_block darwin amd64
 platform_block darwin arm64
-
-cat <<EOF
-  shortDescription: Fetch and manage kubeconfigs from Rancher-managed clusters
-  description: |
-    A kubectl plugin to manage multiple Rancher instances, list their downstream
-    clusters, and fetch/refresh kubeconfigs individually or in bulk. Rancher API
-    tokens can be stored either as plaintext or encrypted (passphrase-protected file
-    backend), selectable per instance.
-  homepage: https://github.com/${REPO}
-EOF

@@ -4,6 +4,13 @@ metadata:
   name: sheep
 spec:
   version: v0.1.0
+  homepage: https://github.com/ahoz/kubectl-sheep
+  shortDescription: Fetch and manage kubeconfigs from Rancher-managed clusters
+  description: |
+    A kubectl plugin to manage multiple Rancher instances, list their downstream
+    clusters, and fetch/refresh kubeconfigs individually or in bulk. Rancher API
+    tokens can be stored either as plaintext or encrypted (passphrase-protected file
+    backend), selectable per instance.
   platforms:
     - selector:
         matchLabels:
@@ -33,10 +40,3 @@ spec:
       uri: https://github.com/ahoz/kubectl-sheep/releases/download/v0.1.0/kubectl-sheep_darwin_arm64.tar.gz
       sha256: PLACEHOLDER_UPDATE_ON_RELEASE
       bin: kubectl-sheep
-  shortDescription: Fetch and manage kubeconfigs from Rancher-managed clusters
-  description: |
-    A kubectl plugin to manage multiple Rancher instances, list their downstream
-    clusters, and fetch/refresh kubeconfigs individually or in bulk. Rancher API
-    tokens can be stored either as plaintext or encrypted (passphrase-protected file
-    backend), selectable per instance.
-  homepage: https://github.com/ahoz/kubectl-sheep
