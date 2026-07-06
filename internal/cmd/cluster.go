@@ -70,16 +70,22 @@ func newClusterGetCmd() *cobra.Command {
 			clusterRef := args[1]
 			merge, _ := cmd.Flags().GetBool("merge")
 			replace, _ := cmd.Flags().GetBool("replace")
+			prefix, _ := cmd.Flags().GetString("prefix")
+			contextName, _ := cmd.Flags().GetString("context-name")
 
 			return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{
-				merge:   merge,
-				replace: replace,
+				merge:       merge,
+				replace:     replace,
+				prefix:      prefix,
+				contextName: contextName,
 			}, false)
 		},
 	}
 
 	cmd.Flags().Bool("merge", false, "Merge into ~/.kube/config without prompting")
 	cmd.Flags().Bool("replace", false, "Replace an existing context in ~/.kube/config without prompting (use with --merge)")
+	cmd.Flags().String("prefix", "", "Context name prefix to use when merging (default: instance name)")
+	cmd.Flags().String("context-name", "", "Exact context name to use when merging")
 
 	return cmd
 }
@@ -134,8 +140,10 @@ func localClusterExists(instanceName, clusterRef string) (bool, error) {
 }
 
 type mergeOpts struct {
-	merge   bool
-	replace bool
+	merge       bool
+	replace     bool
+	prefix      string
+	contextName string
 }
 
 func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, merge mergeOpts, refresh bool) error {
@@ -203,10 +211,12 @@ func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, mer
 	fprint(cmd.OutOrStdout(), "Saved kubeconfig for %q to %s\n", cluster.Name, path)
 
 	return offerMergeKubeconfig(mergePromptOptions{
-		Merge:   merge.merge,
-		Replace: merge.replace,
-		In:      cmd.InOrStdin(),
-		Out:     cmd.OutOrStdout(),
-		IsTTY:   prompt.IsTerminal(os.Stdin),
+		Merge:       merge.merge,
+		Replace:     merge.replace,
+		Prefix:      merge.prefix,
+		ContextName: merge.contextName,
+		In:          cmd.InOrStdin(),
+		Out:         cmd.OutOrStdout(),
+		IsTTY:       prompt.IsTerminal(os.Stdin),
 	}, instanceName, cluster.Name, content)
 }

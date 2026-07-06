@@ -13,7 +13,11 @@ import (
 )
 
 func mergeKubeconfig(instance, clusterName, content string) error {
-	prefix := mergePrefix(instance, clusterName)
+	return mergeKubeconfigWithName(instance, clusterName, content, "")
+}
+
+func mergeKubeconfigWithName(instance, clusterName, content, contextName string) error {
+	prefix := mergeContextName(instance, clusterName, "", contextName)
 
 	incoming, err := clientcmd.Load([]byte(content))
 	if err != nil {
@@ -73,15 +77,17 @@ func contextExists(contextName string) (bool, string, error) {
 }
 
 type mergePromptOptions struct {
-	Merge   bool
-	Replace bool
-	In      io.Reader
-	Out     io.Writer
-	IsTTY   bool
+	Merge       bool
+	Replace     bool
+	Prefix      string
+	ContextName string
+	In          io.Reader
+	Out         io.Writer
+	IsTTY       bool
 }
 
 func offerMergeKubeconfig(opts mergePromptOptions, instance, clusterName, content string) error {
-	prefix := mergePrefix(instance, clusterName)
+	prefix := mergeContextName(instance, clusterName, opts.Prefix, opts.ContextName)
 
 	configPath, err := kubeconfigPath()
 	if err != nil {
@@ -123,7 +129,7 @@ func offerMergeKubeconfig(opts mergePromptOptions, instance, clusterName, conten
 		}
 	}
 
-	if err := mergeKubeconfig(instance, clusterName, content); err != nil {
+	if err := mergeKubeconfigWithName(instance, clusterName, content, prefix); err != nil {
 		return err
 	}
 	fprint(opts.Out, "Merged context %q into %s\n", prefix, configPath)
@@ -132,6 +138,19 @@ func offerMergeKubeconfig(opts mergePromptOptions, instance, clusterName, conten
 
 func mergePrefix(instance, clusterName string) string {
 	return instance + "-" + clusterName
+}
+
+func mergeContextName(instance, clusterName, prefix, contextName string) string {
+	contextName = strings.TrimSpace(contextName)
+	if contextName != "" {
+		return contextName
+	}
+
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return mergePrefix(instance, clusterName)
+	}
+	return prefix + "-" + clusterName
 }
 
 func kubeconfigPath() (string, error) {
@@ -175,9 +194,9 @@ func normalizeIncoming(cfg *clientcmdapi.Config, prefix string) {
 	normalized.Clusters[prefix] = cluster
 	normalized.AuthInfos[prefix] = auth
 	normalized.Contexts[prefix] = &clientcmdapi.Context{
-		Cluster:   prefix,
-		AuthInfo:  prefix,
-		Namespace: src.Namespace,
+		Cluster:    prefix,
+		AuthInfo:   prefix,
+		Namespace:  src.Namespace,
 		Extensions: src.Extensions,
 	}
 	normalized.CurrentContext = prefix

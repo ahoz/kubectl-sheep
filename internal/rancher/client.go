@@ -30,6 +30,14 @@ type kubeconfigResponse struct {
 	Config string `json:"config"`
 }
 
+type loginResponse struct {
+	Token string `json:"token"`
+}
+
+type tokenResponse struct {
+	Token string `json:"token"`
+}
+
 // Client talks to the Rancher API.
 type Client struct {
 	baseURL            string
@@ -62,6 +70,109 @@ func NewClient(baseURL, token string, insecureSkipVerify bool) (*Client, error) 
 			Transport: transport,
 		},
 	}, nil
+}
+
+// LoginAuthProvider authenticates against a Rancher auth provider and returns a session token.
+func (c *Client) LoginAuthProvider(ctx context.Context, providerType, providerID, username, password string) (string, error) {
+	providerType = strings.TrimSpace(providerType)
+	providerID = strings.TrimSpace(providerID)
+	username = strings.TrimSpace(username)
+	if providerType == "" {
+		return "", fmt.Errorf("auth provider type must not be empty")
+	}
+	if providerID == "" {
+		return "", fmt.Errorf("auth provider ID must not be empty")
+	}
+	if username == "" {
+		return "", fmt.Errorf("auth username must not be empty")
+	}
+	if password == "" {
+		return "", fmt.Errorf("auth password must not be empty")
+	}
+
+	body := map[string]string{
+		"username":     username,
+		"password":     password,
+		"responseType": "json",
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return "", fmt.Errorf("marshal auth login request: %w", err)
+	}
+
+	path := fmt.Sprintf("/v3-public/%sProviders/%s?action=login", providerType, url.PathEscape(providerID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(payload))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return "", ErrTokenInvalid
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", c.readError(resp)
+	}
+
+	var out loginResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("decode auth login response: %w", err)
+	}
+	if strings.TrimSpace(out.Token) == "" {
+		return "", fmt.Errorf("rancher returned empty auth login token")
+	}
+	return out.Token, nil
+}
+
+// CreateAPIToken creates a long-lived Rancher API token from an authenticated session token.
+func (c *Client) CreateAPIToken(ctx context.Context, description string) (string, error) {
+	description = strings.TrimSpace(description)
+	if description == "" {
+		description = "kubectl-sheep"
+	}
+
+	body := map[string]any{
+		"type":        "token",
+		"description": description,
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return "", fmt.Errorf("marshal token create request: %w", err)
+	}
+
+	req, err := c.newRequest(ctx, http.MethodPost, "/v3/tokens", bytes.NewReader(payload))
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return "", ErrTokenInvalid
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", c.readError(resp)
+	}
+
+	var out tokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("decode token create response: %w", err)
+	}
+	if strings.TrimSpace(out.Token) == "" {
+		return "", fmt.Errorf("rancher returned empty API token")
+	}
+	return out.Token, nil
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
