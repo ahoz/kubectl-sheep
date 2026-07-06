@@ -40,6 +40,7 @@ kubectl sheep cluster list prod
 kubectl sheep cluster get prod my-cluster
 kubectl sheep cluster get prod c-m-abc123 --merge --prefix prod
 kubectl sheep cluster get prod c-m-abc123 --merge --context-name prod-dev
+kubectl sheep cluster install-exec prod c-m-abc123 --context-name prod-dev
 kubectl sheep cluster refresh prod my-cluster
 
 # cluster get interactively offers to merge into ~/.kube/config as <instance>-<cluster>
@@ -66,7 +67,7 @@ For Rancher auth providers that support API login, kubectl-sheep can create the
 Rancher API token directly:
 
 ```bash
-kubectl sheep instance add dev-rancher \
+kubectl sheep instance add prod \
   --url=https://rancher.example.com \
   --auth-login \
   --auth-username alice \
@@ -98,9 +99,58 @@ Merged contexts are named `<instance>-<cluster>` by default. Use `--prefix` to
 replace the instance prefix, or `--context-name` to set the exact context name:
 
 ```bash
-kubectl sheep cluster get prod c-m-abc123 --merge --prefix bv-dev
-kubectl sheep cluster get prod c-m-abc123 --merge --context-name dev
+kubectl sheep cluster get prod c-m-abc123 --merge --prefix team-a
+kubectl sheep cluster get prod c-m-abc123 --merge --context-name prod-dev
 ```
+
+## Exec kubeconfigs
+
+Use `cluster install-exec` to create a stable kubeconfig context without storing
+Rancher-generated Kubernetes credentials in `~/.kube/config`. The merged user
+entry uses Kubernetes' exec credential plugin support and calls `kubectl-sheep`
+whenever kubectl needs credentials.
+
+```bash
+kubectl sheep cluster install-exec prod c-m-abc123 --context-name prod-dev
+kubectl --context prod-dev get pods
+```
+
+The generated kubeconfig user looks like this:
+
+```yaml
+users:
+- name: prod-dev
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1
+      command: kubectl-sheep
+      interactiveMode: IfAvailable
+      args:
+      - auth
+      - exec
+      - prod
+      - c-m-abc123
+```
+
+Each user still needs to configure their local Rancher instance once with
+`instance add` or `instance update-token`. After that, the same exec-based
+kubeconfig can be shared without embedding tokens.
+
+For non-interactive kubectl calls, make sure the local Rancher token can be read
+without a passphrase prompt. For testing, or for environments where the
+passphrase-protected file backend is not suitable for exec plugins, use
+plaintext storage intentionally:
+
+```bash
+kubectl sheep instance add prod \
+  --url=https://rancher.example.com \
+  --auth-login \
+  --auth-username alice \
+  --storage plaintext
+```
+
+The plaintext token is stored in `~/.config/kubectl-sheep/credentials.plain.yaml`
+with file mode `0600`; do not commit or share that file.
 
 ## Configuration
 

@@ -153,6 +153,73 @@ func mergeContextName(instance, clusterName, prefix, contextName string) string 
 	return prefix + "-" + clusterName
 }
 
+type execKubeconfigOptions struct {
+	contextName string
+	command     string
+	args        []string
+}
+
+func buildExecKubeconfig(content string, opts execKubeconfigOptions) (string, error) {
+	contextName := strings.TrimSpace(opts.contextName)
+	if contextName == "" {
+		return "", fmt.Errorf("context name must not be empty")
+	}
+	command := strings.TrimSpace(opts.command)
+	if command == "" {
+		return "", fmt.Errorf("exec command must not be empty")
+	}
+
+	incoming, err := clientcmd.Load([]byte(content))
+	if err != nil {
+		return "", fmt.Errorf("parse kubeconfig for exec install: %w", err)
+	}
+
+	srcName := incoming.CurrentContext
+	if srcName == "" {
+		for name := range incoming.Contexts {
+			srcName = name
+			break
+		}
+	}
+	if srcName == "" {
+		return "", fmt.Errorf("kubeconfig does not contain a context")
+	}
+
+	src, ok := incoming.Contexts[srcName]
+	if !ok {
+		return "", fmt.Errorf("kubeconfig context %q not found", srcName)
+	}
+
+	cluster, ok := incoming.Clusters[src.Cluster]
+	if !ok {
+		return "", fmt.Errorf("kubeconfig cluster %q not found", src.Cluster)
+	}
+
+	out := clientcmdapi.NewConfig()
+	out.Clusters[contextName] = cluster
+	out.AuthInfos[contextName] = &clientcmdapi.AuthInfo{
+		Exec: &clientcmdapi.ExecConfig{
+			APIVersion:      "client.authentication.k8s.io/v1",
+			Command:         command,
+			Args:            opts.args,
+			InteractiveMode: clientcmdapi.IfAvailableExecInteractiveMode,
+		},
+	}
+	out.Contexts[contextName] = &clientcmdapi.Context{
+		Cluster:    contextName,
+		AuthInfo:   contextName,
+		Namespace:  src.Namespace,
+		Extensions: src.Extensions,
+	}
+	out.CurrentContext = contextName
+
+	data, err := clientcmd.Write(*out)
+	if err != nil {
+		return "", fmt.Errorf("write exec kubeconfig: %w", err)
+	}
+	return string(data), nil
+}
+
 func kubeconfigPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
