@@ -6,6 +6,7 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/ahoz/kubectl-sheep/internal/browser"
 	"github.com/ahoz/kubectl-sheep/internal/config"
 	"github.com/ahoz/kubectl-sheep/internal/credentials"
 	"github.com/ahoz/kubectl-sheep/internal/prompt"
@@ -40,6 +41,11 @@ func newInstanceAddCmd() *cobra.Command {
 			url, _ := cmd.Flags().GetString("url")
 			storage, _ := cmd.Flags().GetString("storage")
 			insecure, _ := cmd.Flags().GetBool("insecure")
+			openBrowser, _ := cmd.Flags().GetBool("open")
+			authOpts, err := authLoginOptionsFromFlags(cmd)
+			if err != nil {
+				return err
+			}
 
 			cfg, err := config.Load()
 			if err != nil {
@@ -56,13 +62,20 @@ func newInstanceAddCmd() *cobra.Command {
 				return fmt.Errorf("add instance: %w", err)
 			}
 
-			if tokenPageURL, err := rancher.TokenCreatePageURL(url); err != nil {
-				return fmt.Errorf("build token page URL: %w", err)
-			} else {
-				prompt.PrintTokenCreateHint(cmd.OutOrStdout(), tokenPageURL)
+			if !authOpts.enabled {
+				if tokenPageURL, err := rancher.TokenCreatePageURL(url); err != nil {
+					return fmt.Errorf("build token page URL: %w", err)
+				} else {
+					if openBrowser {
+						if err := browser.Open(tokenPageURL); err != nil {
+							return err
+						}
+					}
+					prompt.PrintTokenCreateHint(cmd.OutOrStdout(), tokenPageURL)
+				}
 			}
 
-			token, err := prompt.ReadSecret(os.Stdin, cmd.OutOrStdout(), "Rancher API token")
+			token, err := readRancherToken(cmd, url, insecure, authOpts, "Rancher API token")
 			if err != nil {
 				return err
 			}
@@ -91,6 +104,8 @@ func newInstanceAddCmd() *cobra.Command {
 	cmd.Flags().String("url", "", "Rancher server URL (required)")
 	cmd.Flags().String("storage", config.StorageEncrypted, "Token storage mode: plaintext or encrypted")
 	cmd.Flags().Bool("insecure", false, "Skip TLS certificate verification")
+	cmd.Flags().Bool("open", false, "Open the Rancher API key page in the default browser")
+	addAuthLoginFlags(cmd)
 
 	_ = cmd.MarkFlagRequired("url")
 
@@ -214,13 +229,18 @@ func newInstanceSetStorageCmd() *cobra.Command {
 }
 
 func newInstanceUpdateTokenCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "update-token <name>",
 		Short: "Update the Rancher API token for an instance",
 		Long:  "Set a new Rancher API token after the current one becomes invalid or expired.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
+			openBrowser, _ := cmd.Flags().GetBool("open")
+			authOpts, err := authLoginOptionsFromFlags(cmd)
+			if err != nil {
+				return err
+			}
 
 			cfg, err := config.Load()
 			if err != nil {
@@ -231,13 +251,20 @@ func newInstanceUpdateTokenCmd() *cobra.Command {
 				return err
 			}
 
-			if tokenPageURL, err := rancher.TokenCreatePageURL(inst.URL); err != nil {
-				return fmt.Errorf("build token page URL: %w", err)
-			} else {
-				prompt.PrintTokenCreateHint(cmd.OutOrStdout(), tokenPageURL)
+			if !authOpts.enabled {
+				if tokenPageURL, err := rancher.TokenCreatePageURL(inst.URL); err != nil {
+					return fmt.Errorf("build token page URL: %w", err)
+				} else {
+					if openBrowser {
+						if err := browser.Open(tokenPageURL); err != nil {
+							return err
+						}
+					}
+					prompt.PrintTokenCreateHint(cmd.OutOrStdout(), tokenPageURL)
+				}
 			}
 
-			token, err := prompt.ReadSecret(os.Stdin, cmd.OutOrStdout(), "New Rancher API token")
+			token, err := readRancherToken(cmd, inst.URL, inst.InsecureSkipVerify, authOpts, "New Rancher API token")
 			if err != nil {
 				return err
 			}
@@ -265,4 +292,94 @@ func newInstanceUpdateTokenCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().Bool("open", false, "Open the Rancher API key page in the default browser")
+	addAuthLoginFlags(cmd)
+
+	return cmd
+}
+
+type authLoginOptions struct {
+	enabled      bool
+	providerType string
+	providerID   string
+	username     string
+}
+
+func addAuthLoginFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("auth-login", false, "Create a Rancher API token by logging in through an auth provider")
+	cmd.Flags().String("auth-provider-type", "activeDirectory", "Rancher auth provider type for --auth-login")
+	cmd.Flags().String("auth-provider-id", "activeDirectory", "Rancher auth provider ID for --auth-login")
+	cmd.Flags().String("auth-username", "", "Username for --auth-login")
+	cmd.Flags().Bool("ldap-login", false, "Shortcut for --auth-login --auth-provider-type=ldap --auth-provider-id=openldap")
+	cmd.Flags().String("ldap-provider", "openldap", "Rancher LDAP provider ID for --ldap-login")
+	cmd.Flags().String("ldap-username", "", "LDAP username for --ldap-login")
+}
+
+func authLoginOptionsFromFlags(cmd *cobra.Command) (authLoginOptions, error) {
+	authLogin, _ := cmd.Flags().GetBool("auth-login")
+	ldapLogin, _ := cmd.Flags().GetBool("ldap-login")
+	if !authLogin && !ldapLogin {
+		return authLoginOptions{}, nil
+	}
+
+	if authLogin && ldapLogin {
+		return authLoginOptions{}, fmt.Errorf("use either --auth-login or --ldap-login, not both")
+	}
+
+	if ldapLogin {
+		ldapProvider, _ := cmd.Flags().GetString("ldap-provider")
+		ldapUsername, _ := cmd.Flags().GetString("ldap-username")
+		return authLoginOptions{
+			enabled:      true,
+			providerType: "ldap",
+			providerID:   ldapProvider,
+			username:     ldapUsername,
+		}, nil
+	}
+
+	providerType, _ := cmd.Flags().GetString("auth-provider-type")
+	providerID, _ := cmd.Flags().GetString("auth-provider-id")
+	username, _ := cmd.Flags().GetString("auth-username")
+	return authLoginOptions{
+		enabled:      true,
+		providerType: providerType,
+		providerID:   providerID,
+		username:     username,
+	}, nil
+}
+
+func readRancherToken(cmd *cobra.Command, rancherURL string, insecure bool, authOpts authLoginOptions, tokenLabel string) (string, error) {
+	if !authOpts.enabled {
+		return prompt.ReadSecret(os.Stdin, cmd.OutOrStdout(), tokenLabel)
+	}
+
+	if authOpts.username == "" {
+		return "", fmt.Errorf("--auth-username is required with --auth-login")
+	}
+
+	password, err := prompt.ReadSecret(os.Stdin, cmd.OutOrStdout(), "Auth provider password")
+	if err != nil {
+		return "", err
+	}
+
+	client, err := rancher.NewClient(rancherURL, "", insecure)
+	if err != nil {
+		return "", err
+	}
+
+	sessionToken, err := client.LoginAuthProvider(context.Background(), authOpts.providerType, authOpts.providerID, authOpts.username, password)
+	if err != nil {
+		return "", err
+	}
+
+	tokenClient, err := rancher.NewClient(rancherURL, sessionToken, insecure)
+	if err != nil {
+		return "", err
+	}
+	token, err := tokenClient.CreateAPIToken(context.Background(), "kubectl-sheep")
+	if err != nil {
+		return "", err
+	}
+	return token, nil
 }

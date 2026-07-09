@@ -27,14 +27,20 @@ mv kubectl-sheep "$(dirname "$(which kubectl)")/"
 ```bash
 # Manage Rancher instances
 kubectl sheep instance add prod --url=https://rancher.example.com --storage=encrypted
+kubectl sheep instance add prod --url=https://rancher.example.com --open
+kubectl sheep instance add prod --url=https://rancher.example.com --auth-login --auth-username alice
 kubectl sheep instance list
 kubectl sheep instance set-storage prod --to=plaintext
-kubectl sheep instance update-token prod
+kubectl sheep instance update-token prod --open
+kubectl sheep instance update-token prod --auth-login --auth-username alice
 kubectl sheep instance remove prod
 
 # Clusters
 kubectl sheep cluster list prod
 kubectl sheep cluster get prod my-cluster
+kubectl sheep cluster get prod c-m-abc123 --merge --prefix prod
+kubectl sheep cluster get prod c-m-abc123 --merge --context-name prod-dev
+kubectl sheep cluster install-exec prod c-m-abc123 --context-name prod-dev
 kubectl sheep cluster refresh prod my-cluster
 
 # cluster get interactively offers to merge into ~/.kube/config as <instance>-<cluster>
@@ -50,6 +56,101 @@ kubectl sheep refresh-all prod
 kubectl sheep fetch-all prod --merge
 kubectl sheep refresh-all prod --merge
 ```
+
+## Authentication
+
+By default, `instance add` and `instance update-token` print the Rancher API key
+page and prompt for a Bearer Token. Use `--open` to open that page in the
+default browser.
+
+For Rancher auth providers that support API login, kubectl-sheep can create the
+Rancher API token directly:
+
+```bash
+kubectl sheep instance add prod \
+  --url=https://rancher.example.com \
+  --auth-login \
+  --auth-username alice \
+  --auth-provider-type activeDirectory \
+  --auth-provider-id activeDirectory
+```
+
+`--auth-provider-type` and `--auth-provider-id` default to `activeDirectory`.
+For OpenLDAP, you can either set them explicitly or use the LDAP shortcut:
+
+```bash
+kubectl sheep instance add prod \
+  --url=https://rancher.example.com \
+  --ldap-login \
+  --ldap-username alice
+```
+
+## Context names
+
+`cluster get` accepts either a Rancher cluster name or ID. Use this to merge
+only the clusters you want:
+
+```bash
+kubectl sheep cluster list prod
+kubectl sheep cluster get prod c-m-abc123 --merge
+```
+
+Merged contexts are named `<instance>-<cluster>` by default. Use `--prefix` to
+replace the instance prefix, or `--context-name` to set the exact context name:
+
+```bash
+kubectl sheep cluster get prod c-m-abc123 --merge --prefix team-a
+kubectl sheep cluster get prod c-m-abc123 --merge --context-name prod-dev
+```
+
+## Exec kubeconfigs
+
+Use `cluster install-exec` to create a stable kubeconfig context without storing
+Rancher-generated Kubernetes credentials in `~/.kube/config`. The merged user
+entry uses Kubernetes' exec credential plugin support and calls `kubectl-sheep`
+whenever kubectl needs credentials.
+
+```bash
+kubectl sheep cluster install-exec prod c-m-abc123 --context-name prod-dev
+kubectl --context prod-dev get pods
+```
+
+The generated kubeconfig user looks like this:
+
+```yaml
+users:
+- name: prod-dev
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1
+      command: kubectl-sheep
+      interactiveMode: IfAvailable
+      args:
+      - auth
+      - exec
+      - prod
+      - c-m-abc123
+```
+
+Each user still needs to configure their local Rancher instance once with
+`instance add` or `instance update-token`. After that, the same exec-based
+kubeconfig can be shared without embedding tokens.
+
+For non-interactive kubectl calls, make sure the local Rancher token can be read
+without a passphrase prompt. For testing, or for environments where the
+passphrase-protected file backend is not suitable for exec plugins, use
+plaintext storage intentionally:
+
+```bash
+kubectl sheep instance add prod \
+  --url=https://rancher.example.com \
+  --auth-login \
+  --auth-username alice \
+  --storage plaintext
+```
+
+The plaintext token is stored in `~/.config/kubectl-sheep/credentials.plain.yaml`
+with file mode `0600`; do not commit or share that file.
 
 ## Configuration
 

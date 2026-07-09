@@ -22,6 +22,7 @@ func newClusterCmd() *cobra.Command {
 
 	cmd.AddCommand(newClusterListCmd())
 	cmd.AddCommand(newClusterGetCmd())
+	cmd.AddCommand(newClusterInstallExecCmd())
 	cmd.AddCommand(newClusterRefreshCmd())
 
 	return cmd
@@ -70,16 +71,53 @@ func newClusterGetCmd() *cobra.Command {
 			clusterRef := args[1]
 			merge, _ := cmd.Flags().GetBool("merge")
 			replace, _ := cmd.Flags().GetBool("replace")
+			prefix, _ := cmd.Flags().GetString("prefix")
+			contextName, _ := cmd.Flags().GetString("context-name")
 
 			return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{
-				merge:   merge,
-				replace: replace,
+				merge:       merge,
+				replace:     replace,
+				prefix:      prefix,
+				contextName: contextName,
 			}, false)
 		},
 	}
 
 	cmd.Flags().Bool("merge", false, "Merge into ~/.kube/config without prompting")
 	cmd.Flags().Bool("replace", false, "Replace an existing context in ~/.kube/config without prompting (use with --merge)")
+	cmd.Flags().String("prefix", "", "Context name prefix to use when merging (default: instance name)")
+	cmd.Flags().String("context-name", "", "Exact context name to use when merging")
+
+	return cmd
+}
+
+func newClusterInstallExecCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "install-exec <instance> <cluster>",
+		Short: "Install an exec-based kubeconfig context",
+		Long:  "Create or update a kubeconfig context that calls kubectl-sheep to load credentials on demand.",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			instanceName := args[0]
+			clusterRef := args[1]
+			replace, _ := cmd.Flags().GetBool("replace")
+			prefix, _ := cmd.Flags().GetString("prefix")
+			contextName, _ := cmd.Flags().GetString("context-name")
+			execCommand, _ := cmd.Flags().GetString("exec-command")
+
+			return installExecCluster(cmd, instanceName, clusterRef, execInstallOpts{
+				replace:     replace,
+				prefix:      prefix,
+				contextName: contextName,
+				execCommand: execCommand,
+			})
+		},
+	}
+
+	cmd.Flags().Bool("replace", false, "Replace an existing context in ~/.kube/config without prompting")
+	cmd.Flags().String("prefix", "", "Context name prefix to use (default: instance name)")
+	cmd.Flags().String("context-name", "", "Exact context name to use")
+	cmd.Flags().String("exec-command", "kubectl-sheep", "Command used by kubeconfig exec users")
 
 	return cmd
 }
@@ -105,6 +143,58 @@ func newClusterRefreshCmd() *cobra.Command {
 			return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{}, true)
 		},
 	}
+}
+
+type execInstallOpts struct {
+	replace     bool
+	prefix      string
+	contextName string
+	execCommand string
+}
+
+func installExecCluster(cmd *cobra.Command, instanceName, clusterRef string, opts execInstallOpts) error {
+	_, client, err := instance.RancherClient(instanceName)
+	if err != nil {
+		return err
+	}
+
+	clusters, err := client.ListClusters(context.Background())
+	if err != nil {
+		return handleRancherError(instanceName, err)
+	}
+
+	cluster, err := rancher.FindCluster(clusters, clusterRef)
+	if err != nil {
+		return err
+	}
+
+	content, err := client.GenerateKubeconfig(context.Background(), cluster.ID)
+	if err != nil {
+		return handleRancherError(instanceName, err)
+	}
+
+	if err := kubeconfig.Save(instanceName, cluster.ID, cluster.Name, content); err != nil {
+		return err
+	}
+
+	contextName := mergeContextName(instanceName, cluster.Name, opts.prefix, opts.contextName)
+	execContent, err := buildExecKubeconfig(content, execKubeconfigOptions{
+		contextName: contextName,
+		command:     opts.execCommand,
+		args:        []string{"auth", "exec", instanceName, cluster.ID},
+	})
+	if err != nil {
+		return err
+	}
+
+	return offerMergeKubeconfig(mergePromptOptions{
+		Merge:       true,
+		Replace:     opts.replace,
+		ContextName: contextName,
+		In:          cmd.InOrStdin(),
+		Out:         cmd.OutOrStdout(),
+		IsTTY:       prompt.IsTerminal(os.Stdin),
+	}, instanceName, cluster.Name, execContent)
 }
 
 func localClusterExists(instanceName, clusterRef string) (bool, error) {
@@ -134,8 +224,10 @@ func localClusterExists(instanceName, clusterRef string) (bool, error) {
 }
 
 type mergeOpts struct {
-	merge   bool
-	replace bool
+	merge       bool
+	replace     bool
+	prefix      string
+	contextName string
 }
 
 func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, merge mergeOpts, refresh bool) error {
@@ -203,10 +295,12 @@ func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, mer
 	fprint(cmd.OutOrStdout(), "Saved kubeconfig for %q to %s\n", cluster.Name, path)
 
 	return offerMergeKubeconfig(mergePromptOptions{
-		Merge:   merge.merge,
-		Replace: merge.replace,
-		In:      cmd.InOrStdin(),
-		Out:     cmd.OutOrStdout(),
-		IsTTY:   prompt.IsTerminal(os.Stdin),
+		Merge:       merge.merge,
+		Replace:     merge.replace,
+		Prefix:      merge.prefix,
+		ContextName: merge.contextName,
+		In:          cmd.InOrStdin(),
+		Out:         cmd.OutOrStdout(),
+		IsTTY:       prompt.IsTerminal(os.Stdin),
 	}, instanceName, cluster.Name, content)
 }

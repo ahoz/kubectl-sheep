@@ -21,6 +21,7 @@ func NewRootCmd() *cobra.Command {
 	}
 
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newAuthCmd())
 	root.AddCommand(newInstanceCmd())
 	root.AddCommand(newClusterCmd())
 	root.AddCommand(newFetchAllCmd())
