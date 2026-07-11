@@ -12,7 +12,7 @@ func handleRancherError(instanceName string, err error) error {
 		return nil
 	}
 	if errors.Is(err, rancher.ErrTokenInvalid) {
-		return fmt.Errorf("rancher token for instance %q is invalid or expired; run: kubectl sheep instance update-token %s", instanceName, instanceName)
+		return fmt.Errorf("rancher token for rancher-instance %q is invalid or expired; run: kubectl sheep rancher-instance update-token %s", instanceName, instanceName)
 	}
 	return err
 }

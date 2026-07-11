@@ -13,7 +13,7 @@ func TestHandleRancherErrorTokenInvalid(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if got := err.Error(); got != `rancher token for instance "prod" is invalid or expired; run: kubectl sheep instance update-token prod` {
+	if got := err.Error(); got != `rancher token for rancher-instance "prod" is invalid or expired; run: kubectl sheep rancher-instance update-token prod` {
 		t.Fatalf("unexpected message: %s", got)
 	}
 }

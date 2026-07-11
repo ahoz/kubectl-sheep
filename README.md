@@ -25,41 +25,43 @@ mv kubectl-sheep "$(dirname "$(which kubectl)")/"
 ## Usage
 
 ```bash
-# Manage Rancher instances
-kubectl sheep instance add prod --url=https://rancher.example.com --storage=encrypted
-kubectl sheep instance add prod --url=https://rancher.example.com --open
-kubectl sheep instance add prod --url=https://rancher.example.com --auth-login --auth-username alice
-kubectl sheep instance list
-kubectl sheep instance set-storage prod --to=plaintext
-kubectl sheep instance update-token prod --open
-kubectl sheep instance update-token prod --auth-login --auth-username alice
-kubectl sheep instance remove prod
+# Manage Rancher instance connections
+kubectl sheep rancher-instance add prod --url=https://rancher.example.com --storage=encrypted
+kubectl sheep rancher-instance add prod --url=https://rancher.example.com --open
+kubectl sheep rancher-instance add prod --url=https://rancher.example.com --auth-login --auth-username alice
+kubectl sheep rancher-instance list
+kubectl sheep rancher-instance set-storage prod --to=plaintext
+kubectl sheep rancher-instance update-token prod --open
+kubectl sheep rancher-instance update-token prod --auth-login --auth-username alice
+kubectl sheep rancher-instance remove prod
 
-# Clusters
-kubectl sheep cluster list prod
-kubectl sheep cluster get prod my-cluster
-kubectl sheep cluster get prod c-m-abc123 --merge --prefix prod
-kubectl sheep cluster get prod c-m-abc123 --merge --context-name prod-dev
-kubectl sheep cluster install-exec prod c-m-abc123 --context-name prod-dev
-kubectl sheep cluster refresh prod my-cluster
+# List clusters on a Rancher instance (remote inventory)
+kubectl sheep rancher-instance clusters list prod
 
-# cluster get interactively offers to merge into ~/.kube/config as <instance>-<cluster>
+# Kubeconfigs (local artifacts)
+kubectl sheep kubeconfig list prod
+kubectl sheep kubeconfig get prod my-cluster
+kubectl sheep kubeconfig get prod c-m-abc123 --merge --prefix prod
+kubectl sheep kubeconfig get prod c-m-abc123 --merge --context-name prod-dev
+kubectl sheep kubeconfig fetch prod my-cluster
+kubectl sheep kubeconfig fetch prod --all
+kubectl sheep kubeconfig refresh prod my-cluster
+kubectl sheep kubeconfig refresh prod --all
+kubectl sheep kubeconfig install-exec prod c-m-abc123 --context-name prod-dev
+
+# kubeconfig get interactively offers to merge into ~/.kube/config as <rancher-instance>-<cluster>
 # Non-interactive merge / replace:
-kubectl sheep cluster get prod my-cluster --merge
-kubectl sheep cluster get prod my-cluster --merge --replace
-
-# Bulk operations
-kubectl sheep fetch-all prod
-kubectl sheep refresh-all prod
+kubectl sheep kubeconfig get prod my-cluster --merge
+kubectl sheep kubeconfig get prod my-cluster --merge --replace
 
 # Optional: merge contexts into ~/.kube/config for bulk commands
-kubectl sheep fetch-all prod --merge
-kubectl sheep refresh-all prod --merge
+kubectl sheep kubeconfig fetch prod --all --merge
+kubectl sheep kubeconfig refresh prod --all --merge
 ```
 
 ## Authentication
 
-By default, `instance add` and `instance update-token` print the Rancher API key
+By default, `rancher-instance add` and `rancher-instance update-token` print the Rancher API key
 page and prompt for a Bearer Token. Use `--open` to open that page in the
 default browser.
 
@@ -67,7 +69,7 @@ For Rancher auth providers that support API login, kubectl-sheep can create the
 Rancher API token directly:
 
 ```bash
-kubectl sheep instance add prod \
+kubectl sheep rancher-instance add prod \
   --url=https://rancher.example.com \
   --auth-login \
   --auth-username alice \
@@ -79,7 +81,7 @@ kubectl sheep instance add prod \
 For OpenLDAP, you can either set them explicitly or use the LDAP shortcut:
 
 ```bash
-kubectl sheep instance add prod \
+kubectl sheep rancher-instance add prod \
   --url=https://rancher.example.com \
   --ldap-login \
   --ldap-username alice
@@ -87,31 +89,31 @@ kubectl sheep instance add prod \
 
 ## Context names
 
-`cluster get` accepts either a Rancher cluster name or ID. Use this to merge
+`kubeconfig get` accepts either a Rancher cluster name or ID. Use this to merge
 only the clusters you want:
 
 ```bash
-kubectl sheep cluster list prod
-kubectl sheep cluster get prod c-m-abc123 --merge
+kubectl sheep rancher-instance clusters list prod
+kubectl sheep kubeconfig get prod c-m-abc123 --merge
 ```
 
-Merged contexts are named `<instance>-<cluster>` by default. Use `--prefix` to
-replace the instance prefix, or `--context-name` to set the exact context name:
+Merged contexts are named `<rancher-instance>-<cluster>` by default. Use `--prefix` to
+replace the rancher-instance prefix, or `--context-name` to set the exact context name:
 
 ```bash
-kubectl sheep cluster get prod c-m-abc123 --merge --prefix team-a
-kubectl sheep cluster get prod c-m-abc123 --merge --context-name prod-dev
+kubectl sheep kubeconfig get prod c-m-abc123 --merge --prefix team-a
+kubectl sheep kubeconfig get prod c-m-abc123 --merge --context-name prod-dev
 ```
 
 ## Exec kubeconfigs
 
-Use `cluster install-exec` to create a stable kubeconfig context without storing
+Use `kubeconfig install-exec` to create a stable kubeconfig context without storing
 Rancher-generated Kubernetes credentials in `~/.kube/config`. The merged user
 entry uses Kubernetes' exec credential plugin support and calls `kubectl-sheep`
 whenever kubectl needs credentials.
 
 ```bash
-kubectl sheep cluster install-exec prod c-m-abc123 --context-name prod-dev
+kubectl sheep kubeconfig install-exec prod c-m-abc123 --context-name prod-dev
 kubectl --context prod-dev get pods
 ```
 
@@ -133,7 +135,7 @@ users:
 ```
 
 Each user still needs to configure their local Rancher instance once with
-`instance add` or `instance update-token`. After that, the same exec-based
+`rancher-instance add` or `rancher-instance update-token`. After that, the same exec-based
 kubeconfig can be shared without embedding tokens.
 
 For non-interactive kubectl calls, make sure the local Rancher token can be read
@@ -142,7 +144,7 @@ passphrase-protected file backend is not suitable for exec plugins, use
 plaintext storage intentionally:
 
 ```bash
-kubectl sheep instance add prod \
+kubectl sheep rancher-instance add prod \
   --url=https://rancher.example.com \
   --auth-login \
   --auth-username alice \
