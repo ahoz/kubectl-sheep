@@ -19,6 +19,7 @@ func newAuthCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Authentication helpers for kubeconfig exec users",
+		Long:  "Internal commands used by exec-based kubeconfig contexts installed via kubeconfig install-exec.",
 	}
 
 	cmd.AddCommand(newAuthExecCmd())

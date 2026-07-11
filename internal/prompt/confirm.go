@@ -20,7 +20,7 @@ func Confirm(in io.Reader, out io.Writer, question string, defaultYes bool) (boo
 	if defaultYes {
 		defaultHint = "Y/n"
 	}
-	_, _ = fmt.Fprintf(out, "%s [%s]: ", question, defaultHint)
+	_, _ = fmt.Fprintf(out, "  %s [%s]: ", question, defaultHint)
 
 	line, err := readLine(in)
 	if err != nil {

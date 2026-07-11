@@ -51,12 +51,12 @@ func promptRancherInstance(cmd *cobra.Command, args []string) (string, error) {
 		return "", fmt.Errorf("no rancher-instances configured; run: kubectl sheep rancher-instance add")
 	}
 
-	options := make([]string, len(cfg.Instances))
+	options := make([]prompt.Choice, len(cfg.Instances))
 	for i, inst := range cfg.Instances {
-		options[i] = fmt.Sprintf("%s  %s", inst.Name, inst.URL)
+		options[i] = prompt.Choice{Title: inst.Name, Subtitle: inst.URL}
 	}
 
-	idx, free, err := prompt.Select(cmd.InOrStdin(), cmd.OutOrStdout(), "Rancher instance:", options)
+	idx, free, err := prompt.Choose(cmd.InOrStdin(), cmd.OutOrStdout(), "Rancher instance", options)
 	if err != nil {
 		return "", err
 	}
@@ -85,12 +85,15 @@ func promptCluster(cmd *cobra.Command, instanceName string) (string, error) {
 		return "", fmt.Errorf("no clusters found on rancher-instance %q", instanceName)
 	}
 
-	options := make([]string, len(clusters))
+	options := make([]prompt.Choice, len(clusters))
 	for i, c := range clusters {
-		options[i] = fmt.Sprintf("%s  %s  %s", c.Name, c.ID, c.State)
+		options[i] = prompt.Choice{
+			Title:    c.Name,
+			Subtitle: fmt.Sprintf("%s · %s", c.ID, c.State),
+		}
 	}
 
-	idx, free, err := prompt.Select(cmd.InOrStdin(), cmd.OutOrStdout(), "Cluster:", options)
+	idx, free, err := prompt.Choose(cmd.InOrStdin(), cmd.OutOrStdout(), "Cluster", options)
 	if err != nil {
 		return "", err
 	}
@@ -109,12 +112,15 @@ func promptStoredCluster(cmd *cobra.Command, instanceName string) (string, error
 		return "", fmt.Errorf("no locally stored kubeconfigs for rancher-instance %q", instanceName)
 	}
 
-	options := make([]string, len(items))
+	options := make([]prompt.Choice, len(items))
 	for i, item := range items {
-		options[i] = fmt.Sprintf("%s  %s  fetched %s", item.name, item.id, item.fetchedAt)
+		options[i] = prompt.Choice{
+			Title:    item.name,
+			Subtitle: fmt.Sprintf("%s · fetched %s", item.id, item.fetchedAt),
+		}
 	}
 
-	idx, free, err := prompt.Select(cmd.InOrStdin(), cmd.OutOrStdout(), "Stored kubeconfig:", options)
+	idx, free, err := prompt.Choose(cmd.InOrStdin(), cmd.OutOrStdout(), "Stored kubeconfig", options)
 	if err != nil {
 		return "", err
 	}
@@ -125,7 +131,7 @@ func promptStoredCluster(cmd *cobra.Command, instanceName string) (string, error
 }
 
 func promptFetchScope(cmd *cobra.Command) (all bool, err error) {
-	idx, _, err := prompt.Select(cmd.InOrStdin(), cmd.OutOrStdout(), "Fetch:", []string{
+	idx, _, err := prompt.Select(cmd.InOrStdin(), cmd.OutOrStdout(), "Fetch scope", []string{
 		"One cluster",
 		"All clusters",
 	})
@@ -136,7 +142,7 @@ func promptFetchScope(cmd *cobra.Command) (all bool, err error) {
 }
 
 func promptRefreshScope(cmd *cobra.Command) (all bool, err error) {
-	idx, _, err := prompt.Select(cmd.InOrStdin(), cmd.OutOrStdout(), "Refresh:", []string{
+	idx, _, err := prompt.Select(cmd.InOrStdin(), cmd.OutOrStdout(), "Refresh scope", []string{
 		"One stored kubeconfig",
 		"All stored kubeconfigs",
 	})

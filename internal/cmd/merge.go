@@ -100,7 +100,9 @@ func offerMergeKubeconfig(opts mergePromptOptions, instance, clusterName, conten
 		if !opts.IsTTY {
 			return nil
 		}
-		question := fmt.Sprintf("Add context %q to %s", prefix, configPath)
+		prompt.Section(opts.Out, "Merge into kubeconfig")
+		prompt.Note(opts.Out, configPath)
+		question := fmt.Sprintf(`Add context %q?`, prefix)
 		doMerge, err = prompt.Confirm(opts.In, opts.Out, question, false)
 		if err != nil {
 			return err
@@ -129,7 +131,7 @@ func offerMergeKubeconfig(opts mergePromptOptions, instance, clusterName, conten
 		if !opts.IsTTY {
 			return fmt.Errorf("context %q already exists in %s; use --replace to overwrite", prefix, configPath)
 		}
-		question := fmt.Sprintf("Context %q already exists in %s. Replace it", prefix, configPath)
+		question := fmt.Sprintf(`Context %q already exists. Replace it?`, prefix)
 		replace, err := prompt.Confirm(opts.In, opts.Out, question, false)
 		if err != nil {
 			return err
@@ -143,7 +145,7 @@ func offerMergeKubeconfig(opts mergePromptOptions, instance, clusterName, conten
 	if err := mergeKubeconfigWithName(instance, clusterName, content, prefix); err != nil {
 		return err
 	}
-	fprint(opts.Out, "Merged context %q into %s\n", prefix, configPath)
+	prompt.Success(opts.Out, fmt.Sprintf(`Merged context %q into %s`, prefix, configPath))
 	return nil
 }
 

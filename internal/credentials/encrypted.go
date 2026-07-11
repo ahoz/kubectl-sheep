@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/99designs/keyring"
 	"github.com/ahoz/kubectl-sheep/internal/config"
+	"github.com/ahoz/kubectl-sheep/internal/prompt"
 )
 
 const (
@@ -19,20 +21,43 @@ type EncryptedStore struct {
 	ring keyring.Keyring
 }
 
+var (
+	encryptedStoreMu sync.Mutex
+	encryptedStore   *EncryptedStore
+)
+
 // NewEncryptedStore opens the encrypted keyring at the default keys directory.
+// The opened keyring is cached for the process so the passphrase is requested once.
 func NewEncryptedStore() (*EncryptedStore, error) {
+	encryptedStoreMu.Lock()
+	defer encryptedStoreMu.Unlock()
+	if encryptedStore != nil {
+		return encryptedStore, nil
+	}
+
 	dir, err := config.ConfigDir()
 	if err != nil {
 		return nil, err
 	}
-	return NewEncryptedStoreAt(filepath.Join(dir, "keys"))
+	store, err := NewEncryptedStoreAt(filepath.Join(dir, "keys"))
+	if err != nil {
+		return nil, err
+	}
+	encryptedStore = store
+	return store, nil
 }
 
 // NewEncryptedStoreAt opens an encrypted keyring at dir (for tests).
 func NewEncryptedStoreAt(dir string) (*EncryptedStore, error) {
-	return newEncryptedStoreAt(dir, func(_ string) (string, error) {
+	return newEncryptedStoreAt(dir, passphrasePrompt)
+}
+
+func passphrasePrompt(_ string) (string, error) {
+	if !prompt.IsTerminal(os.Stdin) {
 		return keyring.TerminalPrompt("Enter passphrase for encrypted token storage")
-	})
+	}
+	prompt.Section(os.Stdout, "Encrypted token storage")
+	return prompt.ReadSecret(os.Stdin, os.Stdout, "Passphrase")
 }
 
 // NewEncryptedStoreAtWithPassword opens an encrypted keyring with a fixed passphrase (for tests).

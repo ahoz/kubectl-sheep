@@ -15,9 +15,10 @@ Rancher API tokens can be stored either as plaintext or encrypted
 // NewRootCmd returns the root command for kubectl sheep.
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "sheep",
-		Short: shortDescription,
-		Long:  longDescription,
+		Use:     "sheep",
+		Short:   shortDescription,
+		Long:    longDescription,
+		Example: exRoot,
 	}
 
 	root.AddCommand(newVersionCmd())

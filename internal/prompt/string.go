@@ -10,9 +10,9 @@ import (
 // ReadString prompts for a line of input. An empty answer returns defaultValue.
 func ReadString(in io.Reader, out io.Writer, label, defaultValue string) (string, error) {
 	if defaultValue != "" {
-		_, _ = fmt.Fprintf(out, "%s [%s]: ", label, defaultValue)
+		_, _ = fmt.Fprintf(out, "  %s [%s]: ", label, defaultValue)
 	} else {
-		_, _ = fmt.Fprintf(out, "%s: ", label)
+		_, _ = fmt.Fprintf(out, "  %s: ", label)
 	}
 
 	line, err := readLine(in)
@@ -31,12 +31,13 @@ func ReadString(in io.Reader, out io.Writer, label, defaultValue string) (string
 // entered a free-form value that did not match a number.
 func Select(in io.Reader, out io.Writer, title string, options []string) (index int, freeText string, err error) {
 	if title != "" {
-		_, _ = fmt.Fprintln(out, title)
+		Section(out, title)
 	}
 	for i, opt := range options {
-		_, _ = fmt.Fprintf(out, "  %d) %s\n", i+1, opt)
+		_, _ = fmt.Fprintf(out, "  %d  %s\n", i+1, opt)
 	}
-	_, _ = fmt.Fprint(out, "Select [1-", len(options), "] (or type a value): ")
+	Blank(out)
+	_, _ = fmt.Fprintf(out, "  Choose [1-%d] (or type a value): ", len(options))
 
 	line, err := readLine(in)
 	if err != nil {

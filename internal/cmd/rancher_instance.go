@@ -17,9 +17,10 @@ import (
 
 func newRancherInstanceCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "rancher-instance",
-		Short: "Manage Rancher instance connections",
-		Long:  "Add, list, remove, and configure registered Rancher instances.",
+		Use:     "rancher-instance",
+		Short:   "Manage Rancher instance connections",
+		Long:    "Add, list, remove, and configure registered Rancher instances.",
+		Example: exRancherInstance,
 	}
 
 	cmd.AddCommand(newRancherInstanceAddCmd())
@@ -34,9 +35,10 @@ func newRancherInstanceCmd() *cobra.Command {
 
 func newRancherInstanceClustersCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "clusters",
-		Short: "Inspect clusters on a Rancher instance",
-		Long:  "List downstream clusters registered on a Rancher instance.",
+		Use:     "clusters",
+		Short:   "Inspect clusters on a Rancher instance",
+		Long:    "List downstream clusters registered on a Rancher instance.",
+		Example: exRancherInstanceClusters,
 	}
 
 	cmd.AddCommand(newRancherInstanceClustersListCmd())
@@ -46,10 +48,11 @@ func newRancherInstanceClustersCmd() *cobra.Command {
 
 func newRancherInstanceClustersListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list <rancher-instance>",
-		Short: "List clusters on a Rancher instance",
-		Long:  "Display all clusters registered on the given Rancher instance.",
-		Args:  cobra.ExactArgs(1),
+		Use:     "list <rancher-instance>",
+		Short:   "List clusters on a Rancher instance",
+		Long:    "Display all clusters registered on the given Rancher instance.",
+		Example: exRancherInstanceClustersList,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, err := instance.RancherClient(args[0])
 			if err != nil {
@@ -78,11 +81,16 @@ func newRancherInstanceClustersListCmd() *cobra.Command {
 
 func newRancherInstanceAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "add [name] [url]",
-		Short: "Add a Rancher instance",
-		Long:  "Register a new Rancher instance with name, URL, and token storage preference.",
-		Args:  cobra.MaximumNArgs(2),
+		Use:     "add [name] [url]",
+		Short:   "Add a Rancher instance",
+		Long:    "Register a new Rancher instance with name, URL, and token storage preference.",
+		Example: exRancherInstanceAdd,
+		Args:    cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if isInteractive(cmd) && len(args) == 0 {
+				prompt.Intro(cmd.OutOrStdout(), "Add Rancher instance")
+			}
+
 			name, url, err := resolveAddNameAndURL(cmd, args)
 			if err != nil {
 				return err
@@ -173,9 +181,10 @@ func newRancherInstanceAddCmd() *cobra.Command {
 
 func newRancherInstanceListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List configured Rancher instances",
-		Long:  "Display all registered Rancher instances and their settings.",
+		Use:     "list",
+		Short:   "List configured Rancher instances",
+		Long:    "Display all registered Rancher instances and their settings.",
+		Example: exRancherInstanceList,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -203,10 +212,11 @@ func newRancherInstanceListCmd() *cobra.Command {
 
 func newRancherInstanceRemoveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove <name>",
-		Short: "Remove a Rancher instance",
-		Long:  "Remove a Rancher instance and its stored credentials.",
-		Args:  cobra.ExactArgs(1),
+		Use:     "remove <name>",
+		Short:   "Remove a Rancher instance",
+		Long:    "Remove a Rancher instance and its stored credentials.",
+		Example: exRancherInstanceRemove,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 
@@ -241,10 +251,11 @@ func newRancherInstanceRemoveCmd() *cobra.Command {
 
 func newRancherInstanceSetStorageCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "set-storage <name>",
-		Short: "Change token storage mode for an instance",
-		Long:  "Migrate an instance's Rancher token between plaintext and encrypted storage.",
-		Args:  cobra.ExactArgs(1),
+		Use:     "set-storage <name>",
+		Short:   "Change token storage mode for an instance",
+		Long:    "Migrate an instance's Rancher token between plaintext and encrypted storage.",
+		Example: exRancherInstanceSetStorage,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			to, _ := cmd.Flags().GetString("to")
@@ -289,11 +300,16 @@ func newRancherInstanceSetStorageCmd() *cobra.Command {
 
 func newRancherInstanceUpdateTokenCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "update-token [name]",
-		Short: "Update the Rancher API token for an instance",
-		Long:  "Set a new Rancher API token after the current one becomes invalid or expired.",
-		Args:  cobra.MaximumNArgs(1),
+		Use:     "update-token [name]",
+		Short:   "Update the Rancher API token for an instance",
+		Long:    "Set a new Rancher API token after the current one becomes invalid or expired.",
+		Example: exRancherInstanceUpdateToken,
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if isInteractive(cmd) && len(args) == 0 {
+				prompt.Intro(cmd.OutOrStdout(), "Update Rancher API token")
+			}
+
 			name, err := promptRancherInstanceName(cmd, args)
 			if err != nil {
 				return err

@@ -9,15 +9,17 @@ import (
 
 	"github.com/ahoz/kubectl-sheep/internal/instance"
 	"github.com/ahoz/kubectl-sheep/internal/kubeconfig"
+	"github.com/ahoz/kubectl-sheep/internal/prompt"
 	"github.com/ahoz/kubectl-sheep/internal/rancher"
 	"github.com/spf13/cobra"
 )
 
 func newKubeconfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "kubeconfig",
-		Short: "Manage locally stored kubeconfigs",
-		Long:  "Fetch, refresh, list, and install kubeconfigs from Rancher-managed clusters.",
+		Use:     "kubeconfig",
+		Short:   "Manage locally stored kubeconfigs",
+		Long:    "Fetch, refresh, list, and install kubeconfigs from Rancher-managed clusters.",
+		Example: exKubeconfig,
 	}
 
 	cmd.AddCommand(newKubeconfigListCmd())
@@ -31,10 +33,11 @@ func newKubeconfigCmd() *cobra.Command {
 
 func newKubeconfigListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list <rancher-instance>",
-		Short: "List locally stored kubeconfigs",
-		Long:  "Display kubeconfigs already downloaded for the given Rancher instance.",
-		Args:  cobra.ExactArgs(1),
+		Use:     "list <rancher-instance>",
+		Short:   "List locally stored kubeconfigs",
+		Long:    "Display kubeconfigs already downloaded for the given Rancher instance.",
+		Example: exKubeconfigList,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			instanceName := args[0]
 
@@ -68,11 +71,16 @@ func newKubeconfigListCmd() *cobra.Command {
 
 func newKubeconfigGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get [rancher-instance] [cluster]",
-		Short: "Fetch kubeconfig for a single cluster",
-		Long:  "Download and store the kubeconfig for the specified cluster.",
-		Args:  cobra.MaximumNArgs(2),
+		Use:     "get [rancher-instance] [cluster]",
+		Short:   "Fetch kubeconfig for a single cluster",
+		Long:    "Download and store the kubeconfig for the specified cluster.",
+		Example: exKubeconfigGet,
+		Args:    cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if isInteractive(cmd) && len(args) < 2 {
+				prompt.Intro(cmd.OutOrStdout(), "Fetch cluster kubeconfig")
+			}
+
 			instanceName, clusterRef, err := resolveKubeconfigTarget(cmd, args, true)
 			if err != nil {
 				return err
@@ -99,10 +107,11 @@ func newKubeconfigGetCmd() *cobra.Command {
 
 func newKubeconfigFetchCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "fetch [rancher-instance] [cluster]",
-		Short: "Fetch kubeconfigs from Rancher",
-		Long:  "Download and store kubeconfigs for one cluster or for all clusters with --all.",
-		Args:  cobra.MaximumNArgs(2),
+		Use:     "fetch [rancher-instance] [cluster]",
+		Short:   "Fetch kubeconfigs from Rancher",
+		Long:    "Download and store kubeconfigs for one cluster or for all clusters with --all.",
+		Example: exKubeconfigFetch,
+		Args:    cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runKubeconfigFetch(cmd, args)
 		},
@@ -120,6 +129,10 @@ func runKubeconfigFetch(cmd *cobra.Command, args []string) error {
 
 	if all && len(args) == 2 {
 		return fmt.Errorf("use either a cluster argument or --all, not both")
+	}
+
+	if isInteractive(cmd) && len(args) < 2 && !all {
+		prompt.Intro(cmd.OutOrStdout(), "Fetch kubeconfigs from Rancher")
 	}
 
 	instanceName, err := promptRancherInstance(cmd, args)
@@ -175,10 +188,11 @@ func runKubeconfigFetch(cmd *cobra.Command, args []string) error {
 
 func newKubeconfigRefreshCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "refresh [rancher-instance] [cluster]",
-		Short: "Refresh locally stored kubeconfigs",
-		Long:  "Re-fetch kubeconfigs for one cluster or for all locally stored clusters with --all.",
-		Args:  cobra.MaximumNArgs(2),
+		Use:     "refresh [rancher-instance] [cluster]",
+		Short:   "Refresh locally stored kubeconfigs",
+		Long:    "Re-fetch kubeconfigs for one cluster or for all locally stored clusters with --all.",
+		Example: exKubeconfigRefresh,
+		Args:    cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runKubeconfigRefresh(cmd, args)
 		},
@@ -196,6 +210,10 @@ func runKubeconfigRefresh(cmd *cobra.Command, args []string) error {
 
 	if all && len(args) == 2 {
 		return fmt.Errorf("use either a cluster argument or --all, not both")
+	}
+
+	if isInteractive(cmd) && len(args) < 2 && !all {
+		prompt.Intro(cmd.OutOrStdout(), "Refresh locally stored kubeconfigs")
 	}
 
 	instanceName, err := promptRancherInstance(cmd, args)
@@ -243,10 +261,11 @@ func runKubeconfigRefresh(cmd *cobra.Command, args []string) error {
 
 func newKubeconfigInstallExecCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "install-exec <rancher-instance> <cluster>",
-		Short: "Install an exec-based kubeconfig context",
-		Long:  "Create or update a kubeconfig context that calls kubectl-sheep to load credentials on demand.",
-		Args:  cobra.ExactArgs(2),
+		Use:     "install-exec <rancher-instance> <cluster>",
+		Short:   "Install an exec-based kubeconfig context",
+		Long:    "Create or update a kubeconfig context that calls kubectl-sheep to load credentials on demand.",
+		Example: exKubeconfigInstallExec,
+		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			replace, _ := cmd.Flags().GetBool("replace")
 			prefix, _ := cmd.Flags().GetString("prefix")
@@ -504,7 +523,12 @@ func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, mer
 		return nil
 	}
 
-	fprint(cmd.OutOrStdout(), "Saved kubeconfig for %q to %s\n", cluster.Name, path)
+	if isInteractive(cmd) {
+		prompt.Success(cmd.OutOrStdout(), fmt.Sprintf(`Saved kubeconfig for %q`, cluster.Name))
+		prompt.Note(cmd.OutOrStdout(), path)
+	} else {
+		fprint(cmd.OutOrStdout(), "Saved kubeconfig for %q to %s\n", cluster.Name, path)
+	}
 
 	return offerMergeKubeconfig(mergePromptOptions{
 		Merge:       merge.merge,
