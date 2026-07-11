@@ -14,7 +14,7 @@ func TestOfferMergeKubeconfigInteractiveYes(t *testing.T) {
 
 	var out bytes.Buffer
 	err := offerMergeKubeconfig(mergePromptOptions{
-		In:    strings.NewReader("y\n"),
+		In:    strings.NewReader("y\n\n"),
 		Out:   &out,
 		IsTTY: true,
 	}, "prod", "my-cluster", sampleKubeconfigContent())
@@ -69,7 +69,7 @@ users:
 
 	var out bytes.Buffer
 	err := offerMergeKubeconfig(mergePromptOptions{
-		In:    strings.NewReader("y\ny\n"),
+		In:    strings.NewReader("y\n\ny\n"),
 		Out:   &out,
 		IsTTY: true,
 	}, "prod", "my-cluster", sampleKubeconfigContent())
@@ -107,7 +107,7 @@ users:
 
 	var out bytes.Buffer
 	err := offerMergeKubeconfig(mergePromptOptions{
-		In:    strings.NewReader("y\nn\n"),
+		In:    strings.NewReader("y\n\nn\n"),
 		Out:   &out,
 		IsTTY: true,
 	}, "prod", "my-cluster", sampleKubeconfigContent())

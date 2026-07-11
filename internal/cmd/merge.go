@@ -87,7 +87,8 @@ type mergePromptOptions struct {
 }
 
 func offerMergeKubeconfig(opts mergePromptOptions, instance, clusterName, content string) error {
-	prefix := mergeContextName(instance, clusterName, opts.Prefix, opts.ContextName)
+	defaultPrefix := mergeContextName(instance, clusterName, opts.Prefix, opts.ContextName)
+	prefix := defaultPrefix
 
 	configPath, err := kubeconfigPath()
 	if err != nil {
@@ -107,6 +108,16 @@ func offerMergeKubeconfig(opts mergePromptOptions, instance, clusterName, conten
 	}
 	if !doMerge {
 		return nil
+	}
+
+	if strings.TrimSpace(opts.ContextName) == "" && opts.IsTTY && !opts.Merge {
+		custom, err := prompt.ReadString(opts.In, opts.Out, "Context name", defaultPrefix)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(custom) != "" {
+			prefix = strings.TrimSpace(custom)
+		}
 	}
 
 	exists, _, err := contextExists(prefix)

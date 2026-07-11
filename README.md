@@ -26,9 +26,11 @@ mv kubectl-sheep "$(dirname "$(which kubectl)")/"
 
 ```bash
 # Manage Rancher instance connections
-kubectl sheep rancher-instance add prod --url=https://rancher.example.com --storage=encrypted
-kubectl sheep rancher-instance add prod --url=https://rancher.example.com --open
-kubectl sheep rancher-instance add prod --url=https://rancher.example.com --auth-login --auth-username alice
+kubectl sheep rancher-instance add prod https://rancher.example.com --storage=encrypted
+kubectl sheep rancher-instance add prod https://rancher.example.com --open
+# Interactive: kubectl sheep rancher-instance add
+# Interactive: kubectl sheep rancher-instance add prod
+kubectl sheep rancher-instance add prod https://rancher.example.com --auth-login --auth-username alice
 kubectl sheep rancher-instance list
 kubectl sheep rancher-instance set-storage prod --to=plaintext
 kubectl sheep rancher-instance update-token prod --open
@@ -39,6 +41,7 @@ kubectl sheep rancher-instance remove prod
 kubectl sheep rancher-instance clusters list prod
 
 # Kubeconfigs (local artifacts)
+# Interactive: kubectl sheep kubeconfig get
 kubectl sheep kubeconfig list prod
 kubectl sheep kubeconfig get prod my-cluster
 kubectl sheep kubeconfig get prod c-m-abc123 --merge --prefix prod
@@ -59,6 +62,32 @@ kubectl sheep kubeconfig fetch prod --all --merge
 kubectl sheep kubeconfig refresh prod --all --merge
 ```
 
+### Interactive mode
+
+When stdin is a TTY, several commands prompt for missing arguments instead of failing:
+
+| Command | Prompts for |
+|---------|-------------|
+| `rancher-instance add` | name, URL, storage, TLS skip, open browser |
+| `rancher-instance update-token` | instance name |
+| `kubeconfig get` | instance, cluster |
+| `kubeconfig fetch` | instance, one cluster or `--all` |
+| `kubeconfig refresh` | instance, one stored cluster or `--all` |
+
+Pass `--no-input` to disable prompts (for scripts and CI).
+
+```bash
+# Fully interactive
+kubectl sheep rancher-instance add
+kubectl sheep kubeconfig get
+kubectl sheep kubeconfig fetch
+kubectl sheep kubeconfig refresh
+
+# Partial args — only missing values are prompted
+kubectl sheep rancher-instance add prod
+kubectl sheep kubeconfig get prod
+```
+
 ## Authentication
 
 By default, `rancher-instance add` and `rancher-instance update-token` print the Rancher API key
@@ -70,7 +99,7 @@ Rancher API token directly:
 
 ```bash
 kubectl sheep rancher-instance add prod \
-  --url=https://rancher.example.com \
+  https://rancher.example.com \
   --auth-login \
   --auth-username alice \
   --auth-provider-type activeDirectory \
@@ -82,7 +111,7 @@ For OpenLDAP, you can either set them explicitly or use the LDAP shortcut:
 
 ```bash
 kubectl sheep rancher-instance add prod \
-  --url=https://rancher.example.com \
+  https://rancher.example.com \
   --ldap-login \
   --ldap-username alice
 ```
@@ -145,7 +174,7 @@ plaintext storage intentionally:
 
 ```bash
 kubectl sheep rancher-instance add prod \
-  --url=https://rancher.example.com \
+  https://rancher.example.com \
   --auth-login \
   --auth-username alice \
   --storage plaintext

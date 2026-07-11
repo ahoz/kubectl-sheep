@@ -25,5 +25,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newRancherInstanceCmd())
 	root.AddCommand(newKubeconfigCmd())
 
+	root.PersistentFlags().Bool("no-input", false, "Disable interactive prompts")
+
 	return root
 }

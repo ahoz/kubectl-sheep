@@ -78,17 +78,33 @@ func newRancherInstanceClustersListCmd() *cobra.Command {
 
 func newRancherInstanceAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "add <name>",
+		Use:   "add [name] [url]",
 		Short: "Add a Rancher instance",
 		Long:  "Register a new Rancher instance with name, URL, and token storage preference.",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
-			url, _ := cmd.Flags().GetString("url")
+			name, url, err := resolveAddNameAndURL(cmd, args)
+			if err != nil {
+				return err
+			}
+			if err := config.ValidateURL(url); err != nil {
+				return err
+			}
+
 			storage, _ := cmd.Flags().GetString("storage")
 			insecure, _ := cmd.Flags().GetBool("insecure")
 			openBrowser, _ := cmd.Flags().GetBool("open")
 			authOpts, err := authLoginOptionsFromFlags(cmd)
+			if err != nil {
+				return err
+			}
+
+			storage, insecure, err = promptAddOptions(cmd, len(args) == 0, storage, insecure)
+			if err != nil {
+				return err
+			}
+
+			openBrowser, err = promptOpenBrowser(cmd, openBrowser)
 			if err != nil {
 				return err
 			}
@@ -147,13 +163,10 @@ func newRancherInstanceAddCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().String("url", "", "Rancher server URL (required)")
 	cmd.Flags().String("storage", config.StorageEncrypted, "Token storage mode: plaintext or encrypted")
 	cmd.Flags().Bool("insecure", false, "Skip TLS certificate verification")
 	cmd.Flags().Bool("open", false, "Open the Rancher API key page in the default browser")
 	addAuthLoginFlags(cmd)
-
-	_ = cmd.MarkFlagRequired("url")
 
 	return cmd
 }
@@ -276,12 +289,15 @@ func newRancherInstanceSetStorageCmd() *cobra.Command {
 
 func newRancherInstanceUpdateTokenCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "update-token <name>",
+		Use:   "update-token [name]",
 		Short: "Update the Rancher API token for an instance",
 		Long:  "Set a new Rancher API token after the current one becomes invalid or expired.",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
+			name, err := promptRancherInstanceName(cmd, args)
+			if err != nil {
+				return err
+			}
 			openBrowser, _ := cmd.Flags().GetBool("open")
 			authOpts, err := authLoginOptionsFromFlags(cmd)
 			if err != nil {
@@ -301,6 +317,10 @@ func newRancherInstanceUpdateTokenCmd() *cobra.Command {
 				if tokenPageURL, err := rancher.TokenCreatePageURL(inst.URL); err != nil {
 					return fmt.Errorf("build token page URL: %w", err)
 				} else {
+					openBrowser, err = promptOpenBrowser(cmd, openBrowser)
+					if err != nil {
+						return err
+					}
 					if openBrowser {
 						if err := browser.Open(tokenPageURL); err != nil {
 							return err

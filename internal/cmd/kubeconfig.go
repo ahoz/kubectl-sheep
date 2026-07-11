@@ -9,7 +9,6 @@ import (
 
 	"github.com/ahoz/kubectl-sheep/internal/instance"
 	"github.com/ahoz/kubectl-sheep/internal/kubeconfig"
-	"github.com/ahoz/kubectl-sheep/internal/prompt"
 	"github.com/ahoz/kubectl-sheep/internal/rancher"
 	"github.com/spf13/cobra"
 )
@@ -69,17 +68,22 @@ func newKubeconfigListCmd() *cobra.Command {
 
 func newKubeconfigGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get <rancher-instance> <cluster>",
+		Use:   "get [rancher-instance] [cluster]",
 		Short: "Fetch kubeconfig for a single cluster",
 		Long:  "Download and store the kubeconfig for the specified cluster.",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			instanceName, clusterRef, err := resolveKubeconfigTarget(cmd, args, true)
+			if err != nil {
+				return err
+			}
+
 			merge, _ := cmd.Flags().GetBool("merge")
 			replace, _ := cmd.Flags().GetBool("replace")
 			prefix, _ := cmd.Flags().GetString("prefix")
 			contextName, _ := cmd.Flags().GetString("context-name")
 
-			return fetchSingleCluster(cmd, args[0], args[1], mergeOpts{
+			return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{
 				merge:       merge,
 				replace:     replace,
 				prefix:      prefix,
@@ -95,35 +99,12 @@ func newKubeconfigGetCmd() *cobra.Command {
 
 func newKubeconfigFetchCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "fetch <rancher-instance> [cluster]",
+		Use:   "fetch [rancher-instance] [cluster]",
 		Short: "Fetch kubeconfigs from Rancher",
 		Long:  "Download and store kubeconfigs for one cluster or for all clusters with --all.",
-		Args:  cobra.RangeArgs(1, 2),
+		Args:  cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			instanceName := args[0]
-			all, _ := cmd.Flags().GetBool("all")
-			merge, _ := cmd.Flags().GetBool("merge")
-
-			if all && len(args) == 2 {
-				return fmt.Errorf("use either a cluster argument or --all, not both")
-			}
-			if !all && len(args) == 1 {
-				return fmt.Errorf("specify a cluster or pass --all")
-			}
-
-			if len(args) == 2 {
-				replace, _ := cmd.Flags().GetBool("replace")
-				prefix, _ := cmd.Flags().GetString("prefix")
-				contextName, _ := cmd.Flags().GetString("context-name")
-				return fetchSingleCluster(cmd, instanceName, args[1], mergeOpts{
-					merge:       merge,
-					replace:     replace,
-					prefix:      prefix,
-					contextName: contextName,
-				}, false)
-			}
-
-			return runFetchAll(cmd, instanceName, merge)
+			return runKubeconfigFetch(cmd, args)
 		},
 	}
 
@@ -133,37 +114,73 @@ func newKubeconfigFetchCmd() *cobra.Command {
 	return cmd
 }
 
+func runKubeconfigFetch(cmd *cobra.Command, args []string) error {
+	all, _ := cmd.Flags().GetBool("all")
+	merge, _ := cmd.Flags().GetBool("merge")
+
+	if all && len(args) == 2 {
+		return fmt.Errorf("use either a cluster argument or --all, not both")
+	}
+
+	instanceName, err := promptRancherInstance(cmd, args)
+	if err != nil {
+		return err
+	}
+
+	if len(args) == 2 {
+		replace, _ := cmd.Flags().GetBool("replace")
+		prefix, _ := cmd.Flags().GetString("prefix")
+		contextName, _ := cmd.Flags().GetString("context-name")
+		return fetchSingleCluster(cmd, instanceName, args[1], mergeOpts{
+			merge:       merge,
+			replace:     replace,
+			prefix:      prefix,
+			contextName: contextName,
+		}, false)
+	}
+
+	if all {
+		return runFetchAll(cmd, instanceName, merge)
+	}
+
+	if len(args) == 1 && !isInteractive(cmd) {
+		return fmt.Errorf("specify a cluster or pass --all")
+	}
+
+	if isInteractive(cmd) {
+		scopeAll, err := promptFetchScope(cmd)
+		if err != nil {
+			return err
+		}
+		if scopeAll {
+			return runFetchAll(cmd, instanceName, merge)
+		}
+		clusterRef, err := promptCluster(cmd, instanceName)
+		if err != nil {
+			return err
+		}
+		replace, _ := cmd.Flags().GetBool("replace")
+		prefix, _ := cmd.Flags().GetString("prefix")
+		contextName, _ := cmd.Flags().GetString("context-name")
+		return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{
+			merge:       merge,
+			replace:     replace,
+			prefix:      prefix,
+			contextName: contextName,
+		}, false)
+	}
+
+	return fmt.Errorf("specify a cluster or pass --all")
+}
+
 func newKubeconfigRefreshCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "refresh <rancher-instance> [cluster]",
+		Use:   "refresh [rancher-instance] [cluster]",
 		Short: "Refresh locally stored kubeconfigs",
 		Long:  "Re-fetch kubeconfigs for one cluster or for all locally stored clusters with --all.",
-		Args:  cobra.RangeArgs(1, 2),
+		Args:  cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			instanceName := args[0]
-			all, _ := cmd.Flags().GetBool("all")
-			merge, _ := cmd.Flags().GetBool("merge")
-
-			if all && len(args) == 2 {
-				return fmt.Errorf("use either a cluster argument or --all, not both")
-			}
-			if !all && len(args) == 1 {
-				return fmt.Errorf("specify a cluster or pass --all")
-			}
-
-			if len(args) == 2 {
-				clusterRef := args[1]
-				exists, err := localClusterExists(instanceName, clusterRef)
-				if err != nil {
-					return err
-				}
-				if !exists {
-					return fmt.Errorf("no local kubeconfig found for cluster %q; use kubeconfig get or fetch first", clusterRef)
-				}
-				return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{}, true)
-			}
-
-			return runRefreshAll(cmd, instanceName, merge)
+			return runKubeconfigRefresh(cmd, args)
 		},
 	}
 
@@ -171,6 +188,57 @@ func newKubeconfigRefreshCmd() *cobra.Command {
 	cmd.Flags().Bool("merge", false, "Merge refreshed contexts into ~/.kube/config")
 
 	return cmd
+}
+
+func runKubeconfigRefresh(cmd *cobra.Command, args []string) error {
+	all, _ := cmd.Flags().GetBool("all")
+	merge, _ := cmd.Flags().GetBool("merge")
+
+	if all && len(args) == 2 {
+		return fmt.Errorf("use either a cluster argument or --all, not both")
+	}
+
+	instanceName, err := promptRancherInstance(cmd, args)
+	if err != nil {
+		return err
+	}
+
+	if len(args) == 2 {
+		clusterRef := args[1]
+		exists, err := localClusterExists(instanceName, clusterRef)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("no local kubeconfig found for cluster %q; use kubeconfig get or fetch first", clusterRef)
+		}
+		return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{}, true)
+	}
+
+	if all {
+		return runRefreshAll(cmd, instanceName, merge)
+	}
+
+	if len(args) == 1 && !isInteractive(cmd) {
+		return fmt.Errorf("specify a cluster or pass --all")
+	}
+
+	if isInteractive(cmd) {
+		scopeAll, err := promptRefreshScope(cmd)
+		if err != nil {
+			return err
+		}
+		if scopeAll {
+			return runRefreshAll(cmd, instanceName, merge)
+		}
+		clusterRef, err := promptStoredCluster(cmd, instanceName)
+		if err != nil {
+			return err
+		}
+		return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{}, true)
+	}
+
+	return fmt.Errorf("specify a cluster or pass --all")
 }
 
 func newKubeconfigInstallExecCmd() *cobra.Command {
@@ -337,7 +405,7 @@ func installExecCluster(cmd *cobra.Command, instanceName, clusterRef string, opt
 		ContextName: contextName,
 		In:          cmd.InOrStdin(),
 		Out:         cmd.OutOrStdout(),
-		IsTTY:       prompt.IsTerminal(os.Stdin),
+		IsTTY:       isInteractive(cmd),
 	}, instanceName, cluster.Name, execContent)
 }
 
@@ -445,6 +513,6 @@ func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, mer
 		ContextName: merge.contextName,
 		In:          cmd.InOrStdin(),
 		Out:         cmd.OutOrStdout(),
-		IsTTY:       prompt.IsTerminal(os.Stdin),
+		IsTTY:       isInteractive(cmd),
 	}, instanceName, cluster.Name, content)
 }
