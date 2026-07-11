@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>kubectl-sheep — Kubeconfigs from Rancher</title>
+  <meta name="description" content="A kubectl plugin to fetch, refresh, and manage kubeconfigs from Rancher-managed clusters.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="icon" href="assets/images/sheep.png" type="image/png">
+  <link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+  <header class="top-bar">
+    <div class="container top-bar-inner">
+      <a class="brand" href="./">
+        <img src="assets/images/sheep.png" alt="kubectl-sheep logo" width="32" height="32">
+        kubectl-sheep
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/ahoz/kubectl-sheep" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container hero-grid">
+      <div>
+        <span class="eyebrow">kubectl plugin · Rancher</span>
+        <h1>Herding kubeconfigs<br>from <span>Rancher</span></h1>
+        <p class="lead">
+          Register Rancher instances, fetch cluster kubeconfigs, refresh them in bulk,
+          and merge contexts into <code>~/.kube/config</code> — with an interactive CLI when you want it.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="guide/">Get started</a>
+          <a class="btn btn-secondary" href="#install">Install via Krew</a>
+        </div>
+      </div>
+      <figure class="hero-media">
+        <img src="guide/media/gifs/kubectl-sheep-demo.gif" alt="kubectl-sheep demo" width="640" height="520">
+      </figure>
+    </div>
+  </section>
+
+  <section id="install" class="install-section">
+    <div class="container">
+      <div class="section-title">
+        <h2>Install</h2>
+        <p>Available via the <a href="https://krew.sigs.k8s.io/">Krew</a> plugin index.</p>
+      </div>
+      <div class="install-panel">
+        <div class="code-block">
+          <button type="button" data-copy="#install-krew">Copy</button>
+          <pre id="install-krew">kubectl krew install sheep</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span>© kubectl-sheep · Apache 2.0</span>
+      <div class="footer-links">
+        <a href="guide/">Docs</a>
+        <a href="https://github.com/ahoz/kubectl-sheep" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/ahoz/kubectl-sheep/issues" target="_blank" rel="noopener">Issues</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/js/site.js"></script>
+</body>
+</html>

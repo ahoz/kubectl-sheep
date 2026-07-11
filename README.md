@@ -5,22 +5,16 @@
 # kubectl-sheep
 
 A [Krew](https://krew.sigs.k8s.io/) plugin for managing kubeconfigs from Rancher-managed clusters.
-## Install
 
-> [!NOTE]
-> This plugin has not been submitted to the [official Krew index](https://github.com/kubernetes-sigs/krew-index) yet. Install from source or a GitHub release until then.
+**Website & docs:** [ahoz.github.io/kubectl-sheep](https://ahoz.github.io/kubectl-sheep) · source in [`docs/`](docs/)
+
+## Install
 
 ```bash
 kubectl krew install sheep
 ```
 
-For local development, build and place the binary on your `PATH`:
-
-```bash
-go build -o kubectl-sheep ./cmd/kubectl-sheep
-chmod +x kubectl-sheep
-mv kubectl-sheep "$(dirname "$(which kubectl)")/"
-```
+Requires [Krew](https://krew.sigs.k8s.io/) — the kubectl plugin manager.
 
 ## Usage
 

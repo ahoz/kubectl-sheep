@@ -1,0 +1,63 @@
+# Authentication
+
+kubectl-sheep needs a Rancher API token per instance. You can paste one manually or create it via an auth provider.
+
+## Manual token (default)
+
+`rancher-instance add` and `update-token` print the Rancher API key creation URL:
+
+```
+Create a Rancher API key (copy the Bearer Token) at:
+  https://rancher.example.com/dashboard/account/create-api-key
+```
+
+Paste the token when prompted. Use `--open` to launch the page in your browser.
+
+## Auth provider login
+
+For Rancher setups with Active Directory or LDAP:
+
+```bash
+kubectl sheep rancher-instance add prod \
+  https://rancher.example.com \
+  --auth-login \
+  --auth-username alice \
+  --auth-provider-type activeDirectory \
+  --auth-provider-id activeDirectory
+```
+
+`--auth-provider-type` and `--auth-provider-id` default to `activeDirectory`.
+
+### LDAP shortcut
+
+```bash
+kubectl sheep rancher-instance add prod \
+  https://rancher.example.com \
+  --ldap-login \
+  --ldap-username alice
+```
+
+`--ldap-login` is equivalent to `--auth-login` with LDAP provider defaults.
+
+## Token storage
+
+| Mode | Location | Notes |
+|------|----------|-------|
+| `encrypted` (default) | `~/.config/kubectl-sheep/keys/` | Passphrase-protected keyring; prompted once per process |
+| `plaintext` | `~/.config/kubectl-sheep/credentials.plain.yaml` | File mode `0600`; required for non-interactive exec contexts |
+
+Switch at any time:
+
+```bash
+kubectl sheep rancher-instance set-storage prod --to=plaintext
+```
+
+> Do not commit or share credential files. They stay on the local machine only.
+
+## Invalid token errors
+
+If Rancher returns 401, kubectl-sheep suggests updating the token:
+
+```bash
+kubectl sheep rancher-instance update-token <instance>
+```
