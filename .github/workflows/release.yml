@@ -117,13 +117,6 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Render Krew plugin manifest
-        run: |
-          chmod +x hack/render-plugin-manifest.sh
-          hack/render-plugin-manifest.sh "${{ github.ref_name }}" dist > dist/plugin.yaml
-          echo "Generated plugin.yaml:"
-          cat dist/plugin.yaml
-
       - name: List release assets
         run: find dist -type f | sort
 
@@ -142,3 +135,6 @@ jobs:
           files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update new version in krew-index
+        uses: rajatjindal/krew-release-bot@v0.0.51
