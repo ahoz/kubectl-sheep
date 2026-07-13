@@ -9,6 +9,10 @@ import (
 
 // ReadString prompts for a line of input. An empty answer returns defaultValue.
 func ReadString(in io.Reader, out io.Writer, label, defaultValue string) (string, error) {
+	if canUseInteractiveMenu(in) {
+		Step(out)
+	}
+
 	if defaultValue != "" {
 		_, _ = fmt.Fprintf(out, "  %s [%s]: ", label, defaultValue)
 	} else {
@@ -27,9 +31,16 @@ func ReadString(in io.Reader, out io.Writer, label, defaultValue string) (string
 	return answer, nil
 }
 
-// Select shows a numbered list and returns the chosen index, or -1 if the user
-// entered a free-form value that did not match a number.
+// Select shows a list and returns the chosen index, or -1 if the user entered a
+// free-form value that did not match a list item (line-based mode only).
 func Select(in io.Reader, out io.Writer, title string, options []string) (index int, freeText string, err error) {
+	if canUseInteractiveMenu(in) {
+		return selectInteractive(out, title, options)
+	}
+	return selectLine(in, out, title, options)
+}
+
+func selectLine(in io.Reader, out io.Writer, title string, options []string) (index int, freeText string, err error) {
 	if title != "" {
 		Section(out, title)
 	}

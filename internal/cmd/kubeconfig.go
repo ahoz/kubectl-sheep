@@ -18,13 +18,19 @@ func newKubeconfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "kubeconfig",
 		Short:   "Manage locally stored kubeconfigs",
-		Long:    "Fetch, refresh, list, and install kubeconfigs from Rancher-managed clusters.",
+		Long: `Download, refresh, list, and install kubeconfigs from Rancher-managed clusters.
+
+Fetched kubeconfigs are saved under ~/.kube/sheep/ and automatically merged into
+~/.kube/config with context names <rancher-instance>-<cluster-name>.
+
+🐑 Interactive commands (omit arguments on a TTY): list, get, refresh.
+
+🪄 Tab-complete instance and cluster arguments after: kubectl sheep completion bash`,
 		Example: exKubeconfig,
 	}
 
 	cmd.AddCommand(newKubeconfigListCmd())
 	cmd.AddCommand(newKubeconfigGetCmd())
-	cmd.AddCommand(newKubeconfigFetchCmd())
 	cmd.AddCommand(newKubeconfigRefreshCmd())
 	cmd.AddCommand(newKubeconfigInstallExecCmd())
 
@@ -33,13 +39,20 @@ func newKubeconfigCmd() *cobra.Command {
 
 func newKubeconfigListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "list <rancher-instance>",
+		Use:     "list [rancher-instance]",
 		Short:   "List locally stored kubeconfigs",
-		Long:    "Display kubeconfigs already downloaded for the given Rancher instance.",
+		Long:    "Display kubeconfigs already downloaded for a Rancher instance. Omit the instance on a TTY to pick one interactively.",
 		Example: exKubeconfigList,
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			instanceName := args[0]
+			if isInteractive(cmd) && len(args) == 0 {
+				prompt.Intro(cmd.OutOrStdout(), "List locally stored kubeconfigs")
+			}
+
+			instanceName, err := promptRancherInstance(cmd, args)
+			if err != nil {
+				return err
+			}
 
 			ids, err := kubeconfig.ListStoredClusterIDs(instanceName)
 			if err != nil {
@@ -72,66 +85,28 @@ func newKubeconfigListCmd() *cobra.Command {
 func newKubeconfigGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "get [rancher-instance] [cluster]",
-		Short:   "Fetch kubeconfig for a single cluster",
-		Long:    "Download and store the kubeconfig for the specified cluster.",
+		Short:   "Fetch kubeconfigs from Rancher",
+		Long:    "Download, store, and merge kubeconfigs for one or more clusters, or for all clusters with --all. Omit arguments on a TTY to pick an instance and scope interactively.",
 		Example: exKubeconfigGet,
 		Args:    cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if isInteractive(cmd) && len(args) < 2 {
-				prompt.Intro(cmd.OutOrStdout(), "Fetch cluster kubeconfig")
-			}
-
-			instanceName, clusterRef, err := resolveKubeconfigTarget(cmd, args, true)
-			if err != nil {
-				return err
-			}
-
-			merge, _ := cmd.Flags().GetBool("merge")
-			replace, _ := cmd.Flags().GetBool("replace")
-			prefix, _ := cmd.Flags().GetString("prefix")
-			contextName, _ := cmd.Flags().GetString("context-name")
-
-			return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{
-				merge:       merge,
-				replace:     replace,
-				prefix:      prefix,
-				contextName: contextName,
-			}, false)
-		},
-	}
-
-	addKubeconfigMergeFlags(cmd)
-
-	return cmd
-}
-
-func newKubeconfigFetchCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "fetch [rancher-instance] [cluster]",
-		Short:   "Fetch kubeconfigs from Rancher",
-		Long:    "Download and store kubeconfigs for one cluster or for all clusters with --all.",
-		Example: exKubeconfigFetch,
-		Args:    cobra.MaximumNArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runKubeconfigFetch(cmd, args)
+			return runKubeconfigGet(cmd, args)
 		},
 	}
 
 	cmd.Flags().Bool("all", false, "Fetch kubeconfigs for all clusters on the Rancher instance")
-	addKubeconfigMergeFlags(cmd)
 
 	return cmd
 }
 
-func runKubeconfigFetch(cmd *cobra.Command, args []string) error {
+func runKubeconfigGet(cmd *cobra.Command, args []string) error {
 	all, _ := cmd.Flags().GetBool("all")
-	merge, _ := cmd.Flags().GetBool("merge")
 
 	if all && len(args) == 2 {
 		return fmt.Errorf("use either a cluster argument or --all, not both")
 	}
 
-	if isInteractive(cmd) && len(args) < 2 && !all {
+	if isInteractive(cmd) && len(args) < 2 {
 		prompt.Intro(cmd.OutOrStdout(), "Fetch kubeconfigs from Rancher")
 	}
 
@@ -141,19 +116,11 @@ func runKubeconfigFetch(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(args) == 2 {
-		replace, _ := cmd.Flags().GetBool("replace")
-		prefix, _ := cmd.Flags().GetString("prefix")
-		contextName, _ := cmd.Flags().GetString("context-name")
-		return fetchSingleCluster(cmd, instanceName, args[1], mergeOpts{
-			merge:       merge,
-			replace:     replace,
-			prefix:      prefix,
-			contextName: contextName,
-		}, false)
+		return fetchSingleCluster(cmd, instanceName, args[1], false)
 	}
 
 	if all {
-		return runFetchAll(cmd, instanceName, merge)
+		return runFetchAll(cmd, instanceName)
 	}
 
 	if len(args) == 1 && !isInteractive(cmd) {
@@ -161,26 +128,38 @@ func runKubeconfigFetch(cmd *cobra.Command, args []string) error {
 	}
 
 	if isInteractive(cmd) {
-		scopeAll, err := promptFetchScope(cmd)
+		scope, err := promptGetScope(cmd)
 		if err != nil {
 			return err
 		}
-		if scopeAll {
-			return runFetchAll(cmd, instanceName, merge)
+		switch scope {
+		case getScopeAll:
+			return runFetchAll(cmd, instanceName)
+		case getScopeMultiple:
+			clusters, err := promptClustersMulti(cmd, instanceName)
+			if err != nil {
+				return err
+			}
+			policy, err := resolveOverwritePolicy(cmd, instanceName, clusters)
+			if err != nil {
+				return err
+			}
+			clusters, err = filterClustersForFetch(cmd, instanceName, clusters, policy)
+			if err != nil {
+				return err
+			}
+			if len(clusters) == 0 {
+				fprintln(cmd.OutOrStdout(), "No kubeconfigs to fetch.")
+				return nil
+			}
+			return runFetchSelected(cmd, instanceName, clusters)
+		default:
+			clusterRef, err := promptCluster(cmd, instanceName)
+			if err != nil {
+				return err
+			}
+			return fetchSingleCluster(cmd, instanceName, clusterRef, false)
 		}
-		clusterRef, err := promptCluster(cmd, instanceName)
-		if err != nil {
-			return err
-		}
-		replace, _ := cmd.Flags().GetBool("replace")
-		prefix, _ := cmd.Flags().GetString("prefix")
-		contextName, _ := cmd.Flags().GetString("context-name")
-		return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{
-			merge:       merge,
-			replace:     replace,
-			prefix:      prefix,
-			contextName: contextName,
-		}, false)
 	}
 
 	return fmt.Errorf("specify a cluster or pass --all")
@@ -190,7 +169,7 @@ func newKubeconfigRefreshCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "refresh [rancher-instance] [cluster]",
 		Short:   "Refresh locally stored kubeconfigs",
-		Long:    "Re-fetch kubeconfigs for one cluster or for all locally stored clusters with --all.",
+		Long:    "Re-fetch kubeconfigs for one cluster or for all locally stored clusters with --all. Omit arguments on a TTY to pick an instance and scope interactively.",
 		Example: exKubeconfigRefresh,
 		Args:    cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -199,14 +178,12 @@ func newKubeconfigRefreshCmd() *cobra.Command {
 	}
 
 	cmd.Flags().Bool("all", false, "Refresh all locally stored kubeconfigs for the Rancher instance")
-	cmd.Flags().Bool("merge", false, "Merge refreshed contexts into ~/.kube/config")
 
 	return cmd
 }
 
 func runKubeconfigRefresh(cmd *cobra.Command, args []string) error {
 	all, _ := cmd.Flags().GetBool("all")
-	merge, _ := cmd.Flags().GetBool("merge")
 
 	if all && len(args) == 2 {
 		return fmt.Errorf("use either a cluster argument or --all, not both")
@@ -228,13 +205,13 @@ func runKubeconfigRefresh(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if !exists {
-			return fmt.Errorf("no local kubeconfig found for cluster %q; use kubeconfig get or fetch first", clusterRef)
+			return fmt.Errorf("no local kubeconfig found for cluster %q; use kubeconfig get first", clusterRef)
 		}
-		return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{}, true)
+		return fetchSingleCluster(cmd, instanceName, clusterRef, true)
 	}
 
 	if all {
-		return runRefreshAll(cmd, instanceName, merge)
+		return runRefreshAll(cmd, instanceName)
 	}
 
 	if len(args) == 1 && !isInteractive(cmd) {
@@ -247,13 +224,13 @@ func runKubeconfigRefresh(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if scopeAll {
-			return runRefreshAll(cmd, instanceName, merge)
+			return runRefreshAll(cmd, instanceName)
 		}
 		clusterRef, err := promptStoredCluster(cmd, instanceName)
 		if err != nil {
 			return err
 		}
-		return fetchSingleCluster(cmd, instanceName, clusterRef, mergeOpts{}, true)
+		return fetchSingleCluster(cmd, instanceName, clusterRef, true)
 	}
 
 	return fmt.Errorf("specify a cluster or pass --all")
@@ -267,36 +244,17 @@ func newKubeconfigInstallExecCmd() *cobra.Command {
 		Example: exKubeconfigInstallExec,
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			replace, _ := cmd.Flags().GetBool("replace")
-			prefix, _ := cmd.Flags().GetString("prefix")
-			contextName, _ := cmd.Flags().GetString("context-name")
 			execCommand, _ := cmd.Flags().GetString("exec-command")
-
-			return installExecCluster(cmd, args[0], args[1], execInstallOpts{
-				replace:     replace,
-				prefix:      prefix,
-				contextName: contextName,
-				execCommand: execCommand,
-			})
+			return installExecCluster(cmd, args[0], args[1], execCommand)
 		},
 	}
 
-	cmd.Flags().Bool("replace", false, "Replace an existing context in ~/.kube/config without prompting")
-	cmd.Flags().String("prefix", "", "Context name prefix to use (default: rancher-instance name)")
-	cmd.Flags().String("context-name", "", "Exact context name to use")
 	cmd.Flags().String("exec-command", "kubectl-sheep", "Command used by kubeconfig exec users")
 
 	return cmd
 }
 
-func addKubeconfigMergeFlags(cmd *cobra.Command) {
-	cmd.Flags().Bool("merge", false, "Merge into ~/.kube/config without prompting")
-	cmd.Flags().Bool("replace", false, "Replace an existing context in ~/.kube/config without prompting (use with --merge)")
-	cmd.Flags().String("prefix", "", "Context name prefix to use when merging (default: rancher-instance name)")
-	cmd.Flags().String("context-name", "", "Exact context name to use when merging")
-}
-
-func runFetchAll(cmd *cobra.Command, instanceName string, merge bool) error {
+func runFetchAll(cmd *cobra.Command, instanceName string) error {
 	_, client, err := instance.RancherClient(instanceName)
 	if err != nil {
 		return err
@@ -311,8 +269,31 @@ func runFetchAll(cmd *cobra.Command, instanceName string, merge bool) error {
 		return nil
 	}
 
-	results := fetchClusters(context.Background(), instanceName, client, clusters, merge)
-	failures := printFetchResults(cmd.OutOrStdout(), instanceName, results)
+	policy, err := resolveOverwritePolicy(cmd, instanceName, clusters)
+	if err != nil {
+		return err
+	}
+
+	clusters, err = filterClustersForFetch(cmd, instanceName, clusters, policy)
+	if err != nil {
+		return err
+	}
+	if len(clusters) == 0 {
+		fprintln(cmd.OutOrStdout(), "No kubeconfigs to fetch.")
+		return nil
+	}
+
+	return runFetchSelected(cmd, instanceName, clusters)
+}
+
+func runFetchSelected(cmd *cobra.Command, instanceName string, clusters []rancher.Cluster) error {
+	_, client, err := instance.RancherClient(instanceName)
+	if err != nil {
+		return err
+	}
+
+	results := fetchClusters(context.Background(), instanceName, client, clusters)
+	failures := printFetchResults(cmd.OutOrStdout(), instanceName, results, isInteractive(cmd))
 	if failures > 0 {
 		for _, r := range results {
 			if errors.Is(r.err, rancher.ErrTokenInvalid) {
@@ -324,7 +305,7 @@ func runFetchAll(cmd *cobra.Command, instanceName string, merge bool) error {
 	return nil
 }
 
-func runRefreshAll(cmd *cobra.Command, instanceName string, merge bool) error {
+func runRefreshAll(cmd *cobra.Command, instanceName string) error {
 	storedIDs, err := kubeconfig.ListStoredClusterIDs(instanceName)
 	if err != nil {
 		return err
@@ -363,8 +344,8 @@ func runRefreshAll(cmd *cobra.Command, instanceName string, merge bool) error {
 		return nil
 	}
 
-	results := refreshClusters(context.Background(), instanceName, client, toRefresh, merge)
-	failures := printRefreshResults(cmd.OutOrStdout(), results)
+	results := refreshClusters(context.Background(), instanceName, client, toRefresh)
+	failures := printRefreshResults(cmd.OutOrStdout(), instanceName, results, isInteractive(cmd))
 	if failures > 0 {
 		for _, r := range results {
 			if errors.Is(r.err, rancher.ErrTokenInvalid) {
@@ -376,14 +357,7 @@ func runRefreshAll(cmd *cobra.Command, instanceName string, merge bool) error {
 	return nil
 }
 
-type execInstallOpts struct {
-	replace     bool
-	prefix      string
-	contextName string
-	execCommand string
-}
-
-func installExecCluster(cmd *cobra.Command, instanceName, clusterRef string, opts execInstallOpts) error {
+func installExecCluster(cmd *cobra.Command, instanceName, clusterRef, execCommand string) error {
 	_, client, err := instance.RancherClient(instanceName)
 	if err != nil {
 		return err
@@ -408,24 +382,30 @@ func installExecCluster(cmd *cobra.Command, instanceName, clusterRef string, opt
 		return err
 	}
 
-	contextName := mergeContextName(instanceName, cluster.Name, opts.prefix, opts.contextName)
+	contextName := mergeContextName(instanceName, cluster.Name)
 	execContent, err := buildExecKubeconfig(content, execKubeconfigOptions{
 		contextName: contextName,
-		command:     opts.execCommand,
+		command:     execCommand,
 		args:        []string{"auth", "exec", instanceName, cluster.ID},
 	})
 	if err != nil {
 		return err
 	}
 
-	return offerMergeKubeconfig(mergePromptOptions{
-		Merge:       true,
-		Replace:     opts.replace,
-		ContextName: contextName,
-		In:          cmd.InOrStdin(),
-		Out:         cmd.OutOrStdout(),
-		IsTTY:       isInteractive(cmd),
-	}, instanceName, cluster.Name, execContent)
+	if err := mergeKubeconfig(instanceName, cluster.Name, execContent); err != nil {
+		return err
+	}
+
+	path, err := kubeconfig.KubeconfigPath(instanceName, cluster.ID)
+	if err != nil {
+		return err
+	}
+	configPath, err := kubeconfigPath()
+	if err != nil {
+		return err
+	}
+	reportKubeconfigSaved(cmd.OutOrStdout(), isInteractive(cmd), cluster.Name, path, contextName, configPath)
+	return nil
 }
 
 func localClusterExists(instanceName, clusterRef string) (bool, error) {
@@ -454,14 +434,7 @@ func localClusterExists(instanceName, clusterRef string) (bool, error) {
 	return kubeconfig.Exists(instanceName, cluster.ID)
 }
 
-type mergeOpts struct {
-	merge       bool
-	replace     bool
-	prefix      string
-	contextName string
-}
-
-func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, merge mergeOpts, refresh bool) error {
+func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, refresh bool) error {
 	_, client, err := instance.RancherClient(instanceName)
 	if err != nil {
 		return err
@@ -475,6 +448,25 @@ func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, mer
 	cluster, err := rancher.FindCluster(clusters, clusterRef)
 	if err != nil {
 		return err
+	}
+
+	if !refresh {
+		policy := overwriteAll
+		if isInteractive(cmd) {
+			var err error
+			policy, err = resolveOverwritePolicy(cmd, instanceName, []rancher.Cluster{*cluster})
+			if err != nil {
+				return err
+			}
+		}
+		ok, err := shouldOverwriteSingle(cmd, instanceName, *cluster, policy)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			fprint(cmd.OutOrStdout(), "Skipped %q: keeping existing kubeconfig\n", cluster.Name)
+			return nil
+		}
 	}
 
 	var previous string
@@ -503,18 +495,27 @@ func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, mer
 	if err != nil {
 		return err
 	}
+	configPath, err := kubeconfigPath()
+	if err != nil {
+		return err
+	}
+	contextName := mergeContextName(instanceName, cluster.Name)
+
+	if err := mergeKubeconfig(instanceName, cluster.Name, content); err != nil {
+		return err
+	}
 
 	if refresh {
 		changed := previous != content
 		hint := kubeconfig.TokenExpiryHint(content)
 		if changed {
-			msg := fmt.Sprintf("kubeconfig for %q updated", cluster.Name)
+			msg := fmt.Sprintf("kubeconfig for %q updated and merged as context %q", cluster.Name, contextName)
 			if hint != "" {
 				msg += ", " + hint
 			}
 			fprintln(cmd.OutOrStdout(), msg)
 		} else {
-			fprint(cmd.OutOrStdout(), "kubeconfig for %q unchanged", cluster.Name)
+			fprint(cmd.OutOrStdout(), "kubeconfig for %q unchanged, merged context %q", cluster.Name, contextName)
 			if hint != "" {
 				fprint(cmd.OutOrStdout(), " (%s)", hint)
 			}
@@ -523,20 +524,6 @@ func fetchSingleCluster(cmd *cobra.Command, instanceName, clusterRef string, mer
 		return nil
 	}
 
-	if isInteractive(cmd) {
-		prompt.Success(cmd.OutOrStdout(), fmt.Sprintf(`Saved kubeconfig for %q`, cluster.Name))
-		prompt.Note(cmd.OutOrStdout(), path)
-	} else {
-		fprint(cmd.OutOrStdout(), "Saved kubeconfig for %q to %s\n", cluster.Name, path)
-	}
-
-	return offerMergeKubeconfig(mergePromptOptions{
-		Merge:       merge.merge,
-		Replace:     merge.replace,
-		Prefix:      merge.prefix,
-		ContextName: merge.contextName,
-		In:          cmd.InOrStdin(),
-		Out:         cmd.OutOrStdout(),
-		IsTTY:       isInteractive(cmd),
-	}, instanceName, cluster.Name, content)
+	reportKubeconfigSaved(cmd.OutOrStdout(), isInteractive(cmd), cluster.Name, path, contextName, configPath)
+	return nil
 }

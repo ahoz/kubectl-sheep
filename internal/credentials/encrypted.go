@@ -56,7 +56,6 @@ func passphrasePrompt(_ string) (string, error) {
 	if !prompt.IsTerminal(os.Stdin) {
 		return keyring.TerminalPrompt("Enter passphrase for encrypted token storage")
 	}
-	prompt.Section(os.Stdout, "Encrypted token storage")
 	return prompt.ReadSecret(os.Stdin, os.Stdout, "Passphrase")
 }
 

@@ -13,17 +13,13 @@ import (
 )
 
 func mergeKubeconfig(instance, clusterName, content string) error {
-	return mergeKubeconfigWithName(instance, clusterName, content, "")
-}
-
-func mergeKubeconfigWithName(instance, clusterName, content, contextName string) error {
-	prefix := mergeContextName(instance, clusterName, "", contextName)
+	contextName := mergeContextName(instance, clusterName)
 
 	incoming, err := clientcmd.Load([]byte(content))
 	if err != nil {
 		return fmt.Errorf("parse kubeconfig to merge: %w", err)
 	}
-	normalizeIncoming(incoming, prefix)
+	normalizeIncoming(incoming, contextName)
 
 	configPath, err := kubeconfigPath()
 	if err != nil {
@@ -61,109 +57,18 @@ func loadKubeConfig(configPath string) (*clientcmdapi.Config, error) {
 	return nil, fmt.Errorf("stat %s: %w", configPath, err)
 }
 
-// contextExists reports whether a context name is already present in ~/.kube/config.
-func contextExists(contextName string) (bool, string, error) {
-	configPath, err := kubeconfigPath()
-	if err != nil {
-		return false, "", err
+func reportKubeconfigSaved(out io.Writer, interactive bool, clusterName, path, contextName, configPath string) {
+	if interactive {
+		prompt.Success(out, fmt.Sprintf(`Saved and merged kubeconfig for %q`, clusterName))
+		prompt.Note(out, path)
+		prompt.Note(out, fmt.Sprintf(`Context %q → %s`, contextName, configPath))
+		return
 	}
-
-	cfg, err := loadKubeConfig(configPath)
-	if err != nil {
-		return false, "", err
-	}
-	_, ok := cfg.Contexts[contextName]
-	return ok, configPath, nil
+	fprint(out, "Saved kubeconfig for %q to %s, merged context %q into %s\n", clusterName, path, contextName, configPath)
 }
 
-type mergePromptOptions struct {
-	Merge       bool
-	Replace     bool
-	Prefix      string
-	ContextName string
-	In          io.Reader
-	Out         io.Writer
-	IsTTY       bool
-}
-
-func offerMergeKubeconfig(opts mergePromptOptions, instance, clusterName, content string) error {
-	defaultPrefix := mergeContextName(instance, clusterName, opts.Prefix, opts.ContextName)
-	prefix := defaultPrefix
-
-	configPath, err := kubeconfigPath()
-	if err != nil {
-		return err
-	}
-
-	doMerge := opts.Merge
-	if !doMerge {
-		if !opts.IsTTY {
-			return nil
-		}
-		prompt.Section(opts.Out, "Merge into kubeconfig")
-		prompt.Note(opts.Out, configPath)
-		question := fmt.Sprintf(`Add context %q?`, prefix)
-		doMerge, err = prompt.Confirm(opts.In, opts.Out, question, false)
-		if err != nil {
-			return err
-		}
-	}
-	if !doMerge {
-		return nil
-	}
-
-	if strings.TrimSpace(opts.ContextName) == "" && opts.IsTTY && !opts.Merge {
-		custom, err := prompt.ReadString(opts.In, opts.Out, "Context name", defaultPrefix)
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(custom) != "" {
-			prefix = strings.TrimSpace(custom)
-		}
-	}
-
-	exists, _, err := contextExists(prefix)
-	if err != nil {
-		return err
-	}
-
-	if exists && !opts.Replace {
-		if !opts.IsTTY {
-			return fmt.Errorf("context %q already exists in %s; use --replace to overwrite", prefix, configPath)
-		}
-		question := fmt.Sprintf(`Context %q already exists. Replace it?`, prefix)
-		replace, err := prompt.Confirm(opts.In, opts.Out, question, false)
-		if err != nil {
-			return err
-		}
-		if !replace {
-			fprintln(opts.Out, "Skipped merge into kubeconfig.")
-			return nil
-		}
-	}
-
-	if err := mergeKubeconfigWithName(instance, clusterName, content, prefix); err != nil {
-		return err
-	}
-	prompt.Success(opts.Out, fmt.Sprintf(`Merged context %q into %s`, prefix, configPath))
-	return nil
-}
-
-func mergePrefix(instance, clusterName string) string {
+func mergeContextName(instance, clusterName string) string {
 	return instance + "-" + clusterName
-}
-
-func mergeContextName(instance, clusterName, prefix, contextName string) string {
-	contextName = strings.TrimSpace(contextName)
-	if contextName != "" {
-		return contextName
-	}
-
-	prefix = strings.TrimSpace(prefix)
-	if prefix == "" {
-		return mergePrefix(instance, clusterName)
-	}
-	return prefix + "-" + clusterName
 }
 
 type execKubeconfigOptions struct {

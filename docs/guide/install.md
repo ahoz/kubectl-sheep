@@ -23,7 +23,26 @@ kubectl krew upgrade sheep
 
 ## Shell completion
 
-kubectl plugins are typically completed via kubectl itself:
+kubectl-sheep ships shell completion for bash, zsh, fish, and PowerShell:
+
+```bash
+# bash
+source <(kubectl sheep completion bash)
+
+# zsh
+source <(kubectl sheep completion zsh)
+
+# fish
+kubectl sheep completion fish | source
+```
+
+After enabling completion, tab-complete:
+
+- Rancher instance names on `rancher-instance remove`, `update-token`, `clusters list`, and kubeconfig commands
+- Cluster names and IDs on `kubeconfig get`, `refresh`, and `install-exec`
+- `--storage` / `--to` values (`encrypted`, `plaintext`)
+
+kubectl itself also provides completion for plugin names:
 
 ```bash
 kubectl completion bash  # or zsh

@@ -7,15 +7,29 @@ import (
 	"strings"
 )
 
-// Choice is one row in a numbered interactive list.
+// Choice is one row in an interactive list.
 type Choice struct {
 	Title    string
 	Subtitle string
+	Details  []Detail
 }
 
-// Choose shows a numbered list with optional subtitles and returns the chosen
-// index, or -1 if the user entered a free-form value that did not match a number.
+// Detail is one line in the interactive info panel.
+type Detail struct {
+	Label string
+	Value string
+}
+
+// Choose shows a list and returns the chosen index, or -1 if the user entered a
+// free-form value that did not match a list item (line-based mode only).
 func Choose(in io.Reader, out io.Writer, sectionTitle string, choices []Choice) (index int, freeText string, err error) {
+	if canUseInteractiveMenu(in) {
+		return chooseInteractive(out, sectionTitle, choices)
+	}
+	return chooseLine(in, out, sectionTitle, choices)
+}
+
+func chooseLine(in io.Reader, out io.Writer, sectionTitle string, choices []Choice) (index int, freeText string, err error) {
 	if sectionTitle != "" {
 		Section(out, sectionTitle)
 	}

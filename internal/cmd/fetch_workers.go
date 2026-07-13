@@ -15,7 +15,7 @@ type fetchResult struct {
 	err     error
 }
 
-func fetchClusters(ctx context.Context, instanceName string, client *rancher.Client, clusters []rancher.Cluster, merge bool) []fetchResult {
+func fetchClusters(ctx context.Context, instanceName string, client *rancher.Client, clusters []rancher.Cluster) []fetchResult {
 	jobs := make(chan rancher.Cluster)
 	results := make(chan fetchResult, len(clusters))
 
@@ -34,11 +34,9 @@ func fetchClusters(ctx context.Context, instanceName string, client *rancher.Cli
 					results <- fetchResult{cluster: c, err: err}
 					continue
 				}
-				if merge {
-					if err := mergeKubeconfig(instanceName, c.Name, content); err != nil {
-						results <- fetchResult{cluster: c, err: err}
-						continue
-					}
+				if err := mergeKubeconfig(instanceName, c.Name, content); err != nil {
+					results <- fetchResult{cluster: c, err: err}
+					continue
 				}
 				results <- fetchResult{cluster: c, err: nil}
 			}
@@ -63,7 +61,8 @@ func fetchClusters(ctx context.Context, instanceName string, client *rancher.Cli
 
 func printFetchResults(w interface {
 	Write([]byte) (int, error)
-}, instanceName string, results []fetchResult) int {
+}, instanceName string, results []fetchResult, interactive bool) int {
+	configPath, _ := kubeconfigPath()
 	failures := 0
 	for _, r := range results {
 		if r.err != nil {
@@ -73,10 +72,15 @@ func printFetchResults(w interface {
 		}
 		path, err := kubeconfig.KubeconfigPath(instanceName, r.cluster.ID)
 		if err != nil {
-			fprint(w, "OK %s (%s)\n", r.cluster.Name, r.cluster.ID)
+			fprint(w, "OK %s (%s), context %q\n", r.cluster.Name, r.cluster.ID, mergeContextName(instanceName, r.cluster.Name))
 			continue
 		}
-		fprint(w, "OK %s (%s) -> %s\n", r.cluster.Name, r.cluster.ID, path)
+		contextName := mergeContextName(instanceName, r.cluster.Name)
+		if interactive {
+			fprint(w, "✓ %s: saved to %s, merged context %q → %s\n", r.cluster.Name, path, contextName, configPath)
+		} else {
+			fprint(w, "OK %s (%s) -> %s, context %q → %s\n", r.cluster.Name, r.cluster.ID, path, contextName, configPath)
+		}
 	}
 	return failures
 }
