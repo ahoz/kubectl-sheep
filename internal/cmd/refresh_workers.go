@@ -17,7 +17,7 @@ type refreshResult struct {
 	err     error
 }
 
-func refreshClusters(ctx context.Context, instanceName string, client *rancher.Client, clusters []rancher.Cluster, merge bool) []refreshResult {
+func refreshClusters(ctx context.Context, instanceName string, client *rancher.Client, clusters []rancher.Cluster) []refreshResult {
 	jobs := make(chan rancher.Cluster)
 	results := make(chan refreshResult, len(clusters))
 
@@ -50,11 +50,9 @@ func refreshClusters(ctx context.Context, instanceName string, client *rancher.C
 					results <- refreshResult{cluster: c, err: err}
 					continue
 				}
-				if merge {
-					if err := mergeKubeconfig(instanceName, c.Name, content); err != nil {
-						results <- refreshResult{cluster: c, err: err}
-						continue
-					}
+				if err := mergeKubeconfig(instanceName, c.Name, content); err != nil {
+					results <- refreshResult{cluster: c, err: err}
+					continue
 				}
 
 				results <- refreshResult{
@@ -84,7 +82,8 @@ func refreshClusters(ctx context.Context, instanceName string, client *rancher.C
 
 func printRefreshResults(w interface {
 	Write([]byte) (int, error)
-}, results []refreshResult) int {
+}, instanceName string, results []refreshResult, interactive bool) int {
+	configPath, _ := kubeconfigPath()
 	failures := 0
 	for _, r := range results {
 		if r.err != nil {
@@ -96,11 +95,13 @@ func printRefreshResults(w interface {
 		if r.changed {
 			status = "updated"
 		}
+		contextName := mergeContextName(instanceName, r.cluster.Name)
 		if r.hint != "" {
-			fprint(w, "OK %s (%s): %s, %s\n", r.cluster.Name, r.cluster.ID, status, r.hint)
+			fprint(w, "OK %s (%s): %s, merged context %q → %s, %s\n", r.cluster.Name, r.cluster.ID, status, contextName, configPath, r.hint)
 		} else {
-			fprint(w, "OK %s (%s): %s\n", r.cluster.Name, r.cluster.ID, status)
+			fprint(w, "OK %s (%s): %s, merged context %q → %s\n", r.cluster.Name, r.cluster.ID, status, contextName, configPath)
 		}
+		_ = interactive
 	}
 	return failures
 }

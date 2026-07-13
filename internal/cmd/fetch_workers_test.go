@@ -21,7 +21,7 @@ func (f *fakeFetcher) GenerateKubeconfig(_ context.Context, id string) (string, 
 	if err, ok := f.fail[id]; ok {
 		return "", err
 	}
-	return "apiVersion: v1\n", nil
+	return sampleKubeconfigContent(), nil
 }
 
 func TestFetchClustersCollectsErrors(t *testing.T) {
@@ -34,7 +34,7 @@ func TestFetchClustersCollectsErrors(t *testing.T) {
 	}
 
 	fetcher := &fakeFetcher{fail: map[string]error{"c-2": fmt.Errorf("boom")}}
-	results := fetchClustersForTest(context.Background(), "prod", fetcher, clusters, false)
+	results := fetchClustersForTest(context.Background(), "prod", fetcher, clusters)
 	if len(results) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}
@@ -52,7 +52,7 @@ func TestFetchClustersCollectsErrors(t *testing.T) {
 
 func fetchClustersForTest(ctx context.Context, instanceName string, client interface {
 	GenerateKubeconfig(context.Context, string) (string, error)
-}, clusters []rancher.Cluster, merge bool) []fetchResult {
+}, clusters []rancher.Cluster) []fetchResult {
 	jobs := make(chan rancher.Cluster)
 	results := make(chan fetchResult, len(clusters))
 
@@ -71,11 +71,9 @@ func fetchClustersForTest(ctx context.Context, instanceName string, client inter
 					results <- fetchResult{cluster: c, err: err}
 					continue
 				}
-				if merge {
-					if err := mergeKubeconfig(instanceName, c.Name, content); err != nil {
-						results <- fetchResult{cluster: c, err: err}
-						continue
-					}
+				if err := mergeKubeconfig(instanceName, c.Name, content); err != nil {
+					results <- fetchResult{cluster: c, err: err}
+					continue
 				}
 				results <- fetchResult{cluster: c, err: nil}
 			}

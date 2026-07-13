@@ -16,6 +16,10 @@ func IsTerminal(f *os.File) bool {
 
 // Confirm asks a yes/no question. defaultYes controls the answer on empty input.
 func Confirm(in io.Reader, out io.Writer, question string, defaultYes bool) (bool, error) {
+	if canUseInteractiveMenu(in) {
+		return confirmInteractive(out, question, defaultYes)
+	}
+
 	defaultHint := "y/N"
 	if defaultYes {
 		defaultHint = "Y/n"

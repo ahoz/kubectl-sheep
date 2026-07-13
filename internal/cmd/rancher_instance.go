@@ -19,7 +19,12 @@ func newRancherInstanceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "rancher-instance",
 		Short:   "Manage Rancher instance connections",
-		Long:    "Add, list, remove, and configure registered Rancher instances.",
+		Long: `Register Rancher instances, manage API tokens, and inspect remote clusters.
+
+🐑 Interactive commands (omit arguments on a TTY): add, remove, update-token,
+clusters list.
+
+🪄 Tab-complete instance names after: kubectl sheep completion bash`,
 		Example: exRancherInstance,
 	}
 
@@ -48,20 +53,29 @@ func newRancherInstanceClustersCmd() *cobra.Command {
 
 func newRancherInstanceClustersListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "list <rancher-instance>",
+		Use:     "list [rancher-instance]",
 		Short:   "List clusters on a Rancher instance",
-		Long:    "Display all clusters registered on the given Rancher instance.",
+		Long:    "Display all clusters registered on a Rancher instance. Omit the instance on a TTY to pick one interactively.",
 		Example: exRancherInstanceClustersList,
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, client, err := instance.RancherClient(args[0])
+			if isInteractive(cmd) && len(args) == 0 {
+				prompt.Intro(cmd.OutOrStdout(), "List clusters on Rancher instance")
+			}
+
+			instanceName, err := promptRancherInstance(cmd, args)
+			if err != nil {
+				return err
+			}
+
+			_, client, err := instance.RancherClient(instanceName)
 			if err != nil {
 				return err
 			}
 
 			clusters, err := client.ListClusters(context.Background())
 			if err != nil {
-				return handleRancherError(args[0], err)
+				return handleRancherError(instanceName, err)
 			}
 
 			if len(clusters) == 0 {
@@ -83,7 +97,7 @@ func newRancherInstanceAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "add [name] [url]",
 		Short:   "Add a Rancher instance",
-		Long:    "Register a new Rancher instance with name, URL, and token storage preference.",
+		Long:    "Register a new Rancher instance with name, URL, and token storage preference. Run without arguments on a TTY for an interactive wizard.",
 		Example: exRancherInstanceAdd,
 		Args:    cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -212,13 +226,20 @@ func newRancherInstanceListCmd() *cobra.Command {
 
 func newRancherInstanceRemoveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "remove <name>",
+		Use:     "remove [name]",
 		Short:   "Remove a Rancher instance",
-		Long:    "Remove a Rancher instance and its stored credentials.",
+		Long:    "Remove a Rancher instance and its stored credentials. Omit the name on a TTY to pick one interactively.",
 		Example: exRancherInstanceRemove,
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
+			if isInteractive(cmd) && len(args) == 0 {
+				prompt.Intro(cmd.OutOrStdout(), "Remove Rancher instance")
+			}
+
+			name, err := promptRancherInstance(cmd, args)
+			if err != nil {
+				return err
+			}
 
 			cfg, err := config.Load()
 			if err != nil {
@@ -302,7 +323,7 @@ func newRancherInstanceUpdateTokenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "update-token [name]",
 		Short:   "Update the Rancher API token for an instance",
-		Long:    "Set a new Rancher API token after the current one becomes invalid or expired.",
+		Long:    "Set a new Rancher API token after the current one becomes invalid or expired. Omit the instance on a TTY to pick one interactively.",
 		Example: exRancherInstanceUpdateToken,
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -310,7 +331,7 @@ func newRancherInstanceUpdateTokenCmd() *cobra.Command {
 				prompt.Intro(cmd.OutOrStdout(), "Update Rancher API token")
 			}
 
-			name, err := promptRancherInstanceName(cmd, args)
+			name, err := promptRancherInstance(cmd, args)
 			if err != nil {
 				return err
 			}
