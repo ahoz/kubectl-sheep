@@ -1,9 +1,11 @@
 package credentials
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/99designs/keyring"
@@ -15,6 +17,10 @@ const (
 	keyringService = "kubectl-sheep"
 	tokenKeyPrefix = "rancher-token:"
 )
+
+// ErrWrongPassphrase is returned when encrypted token storage cannot be
+// decrypted with the provided passphrase.
+var ErrWrongPassphrase = errors.New("incorrect passphrase for encrypted token storage")
 
 // EncryptedStore stores tokens using keyring FileBackend with a passphrase.
 type EncryptedStore struct {
@@ -106,7 +112,7 @@ func tokenKey(instance string) string {
 func (s *EncryptedStore) Get(instance string) (string, error) {
 	item, err := s.ring.Get(tokenKey(instance))
 	if err != nil {
-		return "", fmt.Errorf("get encrypted token for instance %q: %w", instance, err)
+		return "", encryptedTokenError(instance, err)
 	}
 	return string(item.Data), nil
 }
@@ -117,7 +123,7 @@ func (s *EncryptedStore) Set(instance, token string) error {
 		Key:  tokenKey(instance),
 		Data: []byte(token),
 	}); err != nil {
-		return fmt.Errorf("set encrypted token for instance %q: %w", instance, err)
+		return encryptedTokenError(instance, err)
 	}
 	return nil
 }
@@ -128,4 +134,22 @@ func (s *EncryptedStore) Delete(instance string) error {
 		return fmt.Errorf("delete encrypted token for instance %q: %w", instance, err)
 	}
 	return nil
+}
+
+func encryptedTokenError(instance string, err error) error {
+	if isWrongPassphrase(err) {
+		resetEncryptedStore()
+		return fmt.Errorf("%w (rancher-instance %q)", ErrWrongPassphrase, instance)
+	}
+	return fmt.Errorf("encrypted token for instance %q: %w", instance, err)
+}
+
+func isWrongPassphrase(err error) bool {
+	return strings.Contains(err.Error(), "integrity check failed")
+}
+
+func resetEncryptedStore() {
+	encryptedStoreMu.Lock()
+	defer encryptedStoreMu.Unlock()
+	encryptedStore = nil
 }
