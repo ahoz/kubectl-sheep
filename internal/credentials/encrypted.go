@@ -22,8 +22,9 @@ type EncryptedStore struct {
 }
 
 var (
-	encryptedStoreMu sync.Mutex
-	encryptedStore   *EncryptedStore
+	encryptedStoreMu   sync.Mutex
+	encryptedStore     *EncryptedStore
+	nextPassphraseHint string
 )
 
 // NewEncryptedStore opens the encrypted keyring at the default keys directory.
@@ -52,11 +53,23 @@ func NewEncryptedStoreAt(dir string) (*EncryptedStore, error) {
 	return newEncryptedStoreAt(dir, passphrasePrompt)
 }
 
+// SetNextPassphraseHint sets a one-shot hint shown above the passphrase prompt.
+func SetNextPassphraseHint(hint string) {
+	nextPassphraseHint = hint
+}
+
 func passphrasePrompt(_ string) (string, error) {
+	hint := nextPassphraseHint
+	nextPassphraseHint = ""
+
 	if !prompt.IsTerminal(os.Stdin) {
-		return keyring.TerminalPrompt("Enter passphrase for encrypted token storage")
+		label := "Enter passphrase for encrypted token storage"
+		if hint != "" {
+			label += ". " + hint
+		}
+		return keyring.TerminalPrompt(label)
 	}
-	return prompt.ReadSecret(os.Stdin, os.Stdout, "Passphrase")
+	return prompt.ReadSecret(os.Stdin, os.Stdout, "Passphrase", hint)
 }
 
 // NewEncryptedStoreAtWithPassword opens an encrypted keyring with a fixed passphrase (for tests).
