@@ -2,61 +2,34 @@ package cmd
 
 import (
 	"context"
-	"sync"
 
 	"github.com/ahoz/kubectl-sheep/internal/kubeconfig"
 	"github.com/ahoz/kubectl-sheep/internal/rancher"
 )
 
-const fetchWorkers = 5
+type kubeconfigGenerator interface {
+	GenerateKubeconfig(context.Context, string) (string, error)
+}
 
 type fetchResult struct {
 	cluster rancher.Cluster
 	err     error
 }
 
-func fetchClusters(ctx context.Context, instanceName string, client *rancher.Client, clusters []rancher.Cluster) []fetchResult {
-	jobs := make(chan rancher.Cluster)
-	results := make(chan fetchResult, len(clusters))
-
-	var wg sync.WaitGroup
-	for range fetchWorkers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for c := range jobs {
-				content, err := client.GenerateKubeconfig(ctx, c.ID)
-				if err != nil {
-					results <- fetchResult{cluster: c, err: err}
-					continue
-				}
-				if err := kubeconfig.Save(instanceName, c.ID, c.Name, content); err != nil {
-					results <- fetchResult{cluster: c, err: err}
-					continue
-				}
-				if err := mergeKubeconfig(instanceName, c.Name, content); err != nil {
-					results <- fetchResult{cluster: c, err: err}
-					continue
-				}
-				results <- fetchResult{cluster: c, err: nil}
-			}
-		}()
-	}
-
-	go func() {
-		for _, c := range clusters {
-			jobs <- c
+func fetchClusters(ctx context.Context, instanceName string, client kubeconfigGenerator, clusters []rancher.Cluster) []fetchResult {
+	return runClusterJobs(clusters, fetchWorkers, func(c rancher.Cluster) fetchResult {
+		content, err := client.GenerateKubeconfig(ctx, c.ID)
+		if err != nil {
+			return fetchResult{cluster: c, err: err}
 		}
-		close(jobs)
-		wg.Wait()
-		close(results)
-	}()
-
-	collected := make([]fetchResult, 0, len(clusters))
-	for r := range results {
-		collected = append(collected, r)
-	}
-	return collected
+		if err := kubeconfig.Save(instanceName, c.ID, c.Name, content); err != nil {
+			return fetchResult{cluster: c, err: err}
+		}
+		if err := mergeKubeconfig(instanceName, c.Name, content); err != nil {
+			return fetchResult{cluster: c, err: err}
+		}
+		return fetchResult{cluster: c}
+	})
 }
 
 func printFetchResults(w interface {
