@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/ahoz/kubectl-sheep/internal/config"
@@ -27,6 +28,9 @@ func RancherClient(name string) (*config.Instance, *rancher.Client, error) {
 
 	token, err := store.Get(name)
 	if err != nil {
+		if errors.Is(err, credentials.ErrWrongPassphrase) {
+			return nil, nil, err
+		}
 		return nil, nil, fmt.Errorf("get token for instance %q: %w", name, err)
 	}
 

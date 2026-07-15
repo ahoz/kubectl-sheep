@@ -1,6 +1,8 @@
 package credentials
 
 import (
+	"errors"
+	"strings"
 	"testing"
 )
 
@@ -65,5 +67,43 @@ func TestMigrateStoragePlainToEncrypted(t *testing.T) {
 	}
 	if _, err := src.Get("dev"); err == nil {
 		t.Fatal("plaintext token should be deleted")
+	}
+}
+
+func TestEncryptedStoreWrongPassphrase(t *testing.T) {
+	dir := t.TempDir()
+
+	store, err := NewEncryptedStoreAtWithPassword(dir, "correct-pass")
+	if err != nil {
+		t.Fatalf("NewEncryptedStoreAtWithPassword: %v", err)
+	}
+	if err := store.Set("prod", "secret"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	encryptedStoreMu.Lock()
+	encryptedStore = store
+	encryptedStoreMu.Unlock()
+
+	wrong, err := newEncryptedStoreAt(dir, func(_ string) (string, error) {
+		return "wrong-pass", nil
+	})
+	if err != nil {
+		t.Fatalf("newEncryptedStoreAt: %v", err)
+	}
+
+	_, err = wrong.Get("prod")
+	if !errors.Is(err, ErrWrongPassphrase) {
+		t.Fatalf("Get: got %v, want ErrWrongPassphrase", err)
+	}
+	if !strings.Contains(err.Error(), `rancher-instance "prod"`) {
+		t.Fatalf("Get: expected instance in error, got %v", err)
+	}
+
+	encryptedStoreMu.Lock()
+	cached := encryptedStore
+	encryptedStoreMu.Unlock()
+	if cached != nil {
+		t.Fatal("expected encrypted store cache to be cleared after wrong passphrase")
 	}
 }
