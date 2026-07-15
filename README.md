@@ -22,65 +22,56 @@ Requires [Krew](https://krew.sigs.k8s.io/) — the kubectl plugin manager.
 # Manage Rancher instance connections
 kubectl sheep rancher-instance add prod https://rancher.example.com --storage=encrypted
 kubectl sheep rancher-instance add prod https://rancher.example.com --open
-# Interactive: kubectl sheep rancher-instance add
-# Interactive: kubectl sheep rancher-instance add prod
 kubectl sheep rancher-instance add prod https://rancher.example.com --auth-login --auth-username alice
 kubectl sheep rancher-instance list
 kubectl sheep rancher-instance set-storage prod --to=plaintext
 kubectl sheep rancher-instance update-token prod --open
-kubectl sheep rancher-instance update-token prod --auth-login --auth-username alice
 kubectl sheep rancher-instance remove prod
 
 # List clusters on a Rancher instance (remote inventory)
 kubectl sheep rancher-instance clusters list prod
 
-# Kubeconfigs (local artifacts)
-# Interactive: kubectl sheep kubeconfig get
+# Kubeconfigs — saved under ~/.kube/sheep/ and merged into ~/.kube/config
 kubectl sheep kubeconfig list prod
 kubectl sheep kubeconfig get prod my-cluster
-kubectl sheep kubeconfig get prod c-m-abc123 --merge --prefix prod
-kubectl sheep kubeconfig get prod c-m-abc123 --merge --context-name prod-dev
-kubectl sheep kubeconfig fetch prod my-cluster
-kubectl sheep kubeconfig fetch prod --all
+kubectl sheep kubeconfig get prod --all
 kubectl sheep kubeconfig refresh prod my-cluster
 kubectl sheep kubeconfig refresh prod --all
-kubectl sheep kubeconfig install-exec prod c-m-abc123 --context-name prod-dev
-
-# kubeconfig get interactively offers to merge into ~/.kube/config as <rancher-instance>-<cluster>
-# Non-interactive merge / replace:
-kubectl sheep kubeconfig get prod my-cluster --merge
-kubectl sheep kubeconfig get prod my-cluster --merge --replace
-
-# Optional: merge contexts into ~/.kube/config for bulk commands
-kubectl sheep kubeconfig fetch prod --all --merge
-kubectl sheep kubeconfig refresh prod --all --merge
+kubectl sheep kubeconfig install-exec prod c-m-abc123
 ```
 
 ### Interactive mode
 
-When stdin is a TTY, several commands prompt for missing arguments instead of failing:
+When stdin is a TTY, several commands prompt for missing arguments with arrow-key menus (🐑) instead of failing:
 
 | Command | Prompts for |
 |---------|-------------|
-| `rancher-instance add` | name, URL, storage, TLS skip, open browser |
-| `rancher-instance update-token` | instance name |
-| `kubeconfig get` | instance, cluster |
-| `kubeconfig fetch` | instance, one cluster or `--all` |
-| `kubeconfig refresh` | instance, one stored cluster or `--all` |
+| `rancher-instance add` | name, URL, storage, TLS skip, open browser, token |
+| `rancher-instance remove` | instance |
+| `rancher-instance update-token` | instance, token |
+| `rancher-instance clusters list` | instance |
+| `kubeconfig list` | instance |
+| `kubeconfig get` | instance, scope (one / multiple / all), cluster(s) |
+| `kubeconfig refresh` | instance, one stored cluster or all |
 
 Pass `--no-input` to disable prompts (for scripts and CI).
 
 ```bash
 # Fully interactive
 kubectl sheep rancher-instance add
+kubectl sheep rancher-instance remove
 kubectl sheep kubeconfig get
-kubectl sheep kubeconfig fetch
-kubectl sheep kubeconfig refresh
-
-# Partial args — only missing values are prompted
-kubectl sheep rancher-instance add prod
-kubectl sheep kubeconfig get prod
+kubectl sheep kubeconfig list
 ```
+
+### Shell completion
+
+```bash
+source <(kubectl sheep completion bash)   # or zsh / fish
+kubectl sheep kubeconfig get <TAB>
+```
+
+See `kubectl sheep completion --help` for setup examples.
 
 ## Authentication
 
@@ -101,7 +92,7 @@ kubectl sheep rancher-instance add prod \
 ```
 
 `--auth-provider-type` and `--auth-provider-id` default to `activeDirectory`.
-For OpenLDAP, you can either set them explicitly or use the LDAP shortcut:
+For OpenLDAP, use the LDAP shortcut:
 
 ```bash
 kubectl sheep rancher-instance add prod \
@@ -112,21 +103,15 @@ kubectl sheep rancher-instance add prod \
 
 ## Context names
 
-`kubeconfig get` accepts either a Rancher cluster name or ID. Use this to merge
-only the clusters you want:
+`kubeconfig get` accepts either a Rancher cluster name or ID. Fetched kubeconfigs are **automatically merged** into `~/.kube/config` with context name `<rancher-instance>-<cluster>`:
 
 ```bash
 kubectl sheep rancher-instance clusters list prod
-kubectl sheep kubeconfig get prod c-m-abc123 --merge
+kubectl sheep kubeconfig get prod c-m-abc123
+kubectl --context prod-my-cluster get nodes
 ```
 
-Merged contexts are named `<rancher-instance>-<cluster>` by default. Use `--prefix` to
-replace the rancher-instance prefix, or `--context-name` to set the exact context name:
-
-```bash
-kubectl sheep kubeconfig get prod c-m-abc123 --merge --prefix team-a
-kubectl sheep kubeconfig get prod c-m-abc123 --merge --context-name prod-dev
-```
+Re-fetching overwrites an existing context with the same name.
 
 ## Exec kubeconfigs
 
@@ -136,15 +121,15 @@ entry uses Kubernetes' exec credential plugin support and calls `kubectl-sheep`
 whenever kubectl needs credentials.
 
 ```bash
-kubectl sheep kubeconfig install-exec prod c-m-abc123 --context-name prod-dev
-kubectl --context prod-dev get pods
+kubectl sheep kubeconfig install-exec prod c-m-abc123
+kubectl --context prod-my-cluster get pods
 ```
 
 The generated kubeconfig user looks like this:
 
 ```yaml
 users:
-- name: prod-dev
+- name: prod-my-cluster
   user:
     exec:
       apiVersion: client.authentication.k8s.io/v1
@@ -186,6 +171,7 @@ with file mode `0600`; do not commit or share that file.
 | `~/.config/kubectl-sheep/keys/` | Encrypted tokens (keyring FileBackend) |
 | `~/.kube/sheep/<instance>/<cluster-id>.yaml` | Fetched kubeconfigs |
 | `~/.kube/sheep/<instance>/<cluster-id>.meta.yaml` | Fetch metadata |
+| `~/.kube/config` | Merged contexts |
 
 ## Development
 
