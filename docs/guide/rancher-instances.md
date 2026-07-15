@@ -69,12 +69,24 @@ Inventory on the Rancher server (not local kubeconfigs):
 kubectl sheep rancher-instance clusters list prod
 ```
 
+Interactive — pick the instance:
+
+```bash
+kubectl sheep rancher-instance clusters list
+```
+
 ## Remove an instance
 
 Deletes the instance config and stored credentials:
 
 ```bash
 kubectl sheep rancher-instance remove prod
+```
+
+Interactive — pick the instance:
+
+```bash
+kubectl sheep rancher-instance remove
 ```
 
 ## Configuration file

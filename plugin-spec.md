@@ -1,5 +1,10 @@
 # kubectl-sheep — Plugin Spec
 
+> **Implementation note (2026):** The shipped CLI uses `rancher-instance` and `kubeconfig`
+> command groups (not `fetch-all` / `cluster get`). Kubeconfigs are **always** merged into
+> `~/.kube/config` as `<instance>-<cluster>`; there is no `--merge` flag. Interactive
+> arrow-key menus are available on a TTY. See `docs/guide/` for current user documentation.
+
 ## 0. Naming
 
 - **Plugin name (krew):** `sheep`

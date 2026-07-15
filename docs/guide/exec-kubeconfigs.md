@@ -6,21 +6,19 @@
 
 ```bash
 kubectl sheep kubeconfig install-exec prod c-m-abc123
-kubectl sheep kubeconfig install-exec prod c-m-abc123 --context-name prod-dev
 ```
+
+The context is saved as `prod-<cluster-name>` (same naming as a normal `kubeconfig get`) and merged into `~/.kube/config`.
 
 | Flag | Description |
 |------|-------------|
-| `--context-name` | Exact context name in `~/.kube/config` |
-| `--prefix` | Prefix for default naming |
-| `--replace` | Overwrite existing context without prompting |
 | `--exec-command` | Binary invoked by kubeconfig exec (default: `kubectl-sheep`) |
 
 ## Generated user entry
 
 ```yaml
 users:
-- name: prod-dev
+- name: prod-production
   user:
     exec:
       apiVersion: client.authentication.k8s.io/v1
@@ -33,7 +31,7 @@ users:
       - c-m-abc123
 ```
 
-When you run `kubectl --context prod-dev get pods`, kubectl calls `kubectl-sheep auth exec prod c-m-abc123`, which fetches a fresh kubeconfig from Rancher and returns an `ExecCredential`.
+When you run `kubectl --context prod-production get pods`, kubectl calls `kubectl-sheep auth exec prod c-m-abc123`, which fetches a fresh kubeconfig from Rancher and returns an `ExecCredential`.
 
 ## Prerequisites
 
@@ -62,6 +60,6 @@ kubectl sheep rancher-instance add prod \
 ## Verify
 
 ```bash
-kubectl --context prod-dev get pods
-kubectl config view --minify --context prod-dev
+kubectl --context prod-production get pods
+kubectl config view --minify --context prod-production
 ```

@@ -34,6 +34,12 @@ c-m-abc123   production    active
 c-m-def456   staging       active
 ```
 
+Or pick the instance interactively:
+
+```bash
+kubectl sheep rancher-instance clusters list
+```
+
 ## 3. Fetch a kubeconfig
 
 Non-interactive:
@@ -42,25 +48,15 @@ Non-interactive:
 kubectl sheep kubeconfig get prod production
 ```
 
-Interactive (pick instance and cluster):
+Interactive (pick instance and scope — one, multiple, or all clusters):
 
 ```bash
 kubectl sheep kubeconfig get
 ```
 
-The kubeconfig is saved to `~/.kube/sheep/prod/<cluster-id>.yaml`.
+The kubeconfig is saved to `~/.kube/sheep/prod/<cluster-id>.yaml` and automatically merged into `~/.kube/config` as context `prod-production` (`<instance>-<cluster>`).
 
-## 4. Merge into ~/.kube/config
-
-On a TTY, `kubeconfig get` offers to merge after saving. You can also force it:
-
-```bash
-kubectl sheep kubeconfig get prod production --merge
-```
-
-Default context name: `prod-production` (`<instance>-<cluster>`).
-
-## 5. Use kubectl
+## 4. Use kubectl
 
 ```bash
 kubectl --context prod-production get nodes
@@ -68,21 +64,15 @@ kubectl --context prod-production get nodes
 
 ## Bulk fetch (optional)
 
-Download every cluster on an instance:
+Download every cluster on an instance (each is saved and merged automatically):
 
 ```bash
-kubectl sheep kubeconfig fetch prod --all
-```
-
-
-Merge all fetched contexts in one go:
-
-```bash
-kubectl sheep kubeconfig fetch prod --all --merge
+kubectl sheep kubeconfig get prod --all
 ```
 
 ## What's next?
 
 - [Rancher instances](rancher-instances.md) — token rotation, storage migration, removal
-- [Interactive mode](interactive.md) — prompts and `--no-input`
+- [Interactive mode](interactive.md) — prompts, menus, and `--no-input`
 - [Exec contexts](exec-kubeconfigs.md) — share kubeconfigs without embedded tokens
+- [Install](install.md) — shell completion setup

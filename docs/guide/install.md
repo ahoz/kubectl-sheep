@@ -42,11 +42,7 @@ After enabling completion, tab-complete:
 - Cluster names and IDs on `kubeconfig get`, `refresh`, and `install-exec`
 - `--storage` / `--to` values (`encrypted`, `plaintext`)
 
-kubectl itself also provides completion for plugin names:
-
-```bash
-kubectl completion bash  # or zsh
-```
+See `kubectl sheep completion --help` for examples.
 
 ## Build from source
 

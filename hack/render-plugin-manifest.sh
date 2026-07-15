@@ -52,9 +52,10 @@ spec:
   shortDescription: Fetch and manage kubeconfigs from Rancher-managed clusters
   description: |
     A kubectl plugin to manage multiple Rancher instances, list their downstream
-    clusters, and fetch/refresh kubeconfigs individually or in bulk. Rancher API
-    tokens can be stored either as plaintext or encrypted (passphrase-protected file
-    backend), selectable per instance.
+    clusters, and fetch or refresh kubeconfigs individually or in bulk. Fetched
+    kubeconfigs are cached locally and merged into ~/.kube/config automatically.
+    Rancher API tokens can be stored as plaintext or encrypted (passphrase-protected),
+    selectable per instance. Interactive arrow-key menus when run on a TTY.
   platforms:
 EOF
 

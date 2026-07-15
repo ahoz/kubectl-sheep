@@ -2,7 +2,7 @@
 
 > A kubectl plugin for fetching and managing kubeconfigs from Rancher-managed clusters.
 
-kubectl-sheep connects kubectl to Rancher: register instance URLs, store API tokens securely, download cluster kubeconfigs, refresh them in bulk, and merge contexts into your main kubeconfig.
+kubectl-sheep connects kubectl to Rancher: register instance URLs, store API tokens securely, download cluster kubeconfigs, refresh them in bulk, and automatically merge contexts into your main kubeconfig.
 
 ## Why kubectl-sheep?
 
@@ -10,8 +10,8 @@ Rancher manages many downstream clusters, but getting their kubeconfigs into you
 
 - **Multiple Rancher instances** — dev, staging, prod, each with its own token storage preference
 - **Local cache** — kubeconfigs saved under `~/.kube/sheep/` with fetch metadata
-- **Bulk operations** — fetch or refresh all clusters with `--all`
-- **Interactive CLI** — omit arguments on a TTY and pick from guided menus
+- **Bulk operations** — `kubeconfig get --all` or `kubeconfig refresh --all`
+- **Interactive CLI** — arrow-key menus with search; omit arguments on a TTY
 - **Exec contexts** — share kubeconfig entries without embedding long-lived tokens
 
 ## Quick example
@@ -32,7 +32,7 @@ kubectl --context prod-my-cluster get nodes
 | Group | Purpose |
 |-------|---------|
 | `rancher-instance` | Add, list, remove instances; update tokens; list remote clusters |
-| `kubeconfig` | Fetch, refresh, list local kubeconfigs; install exec contexts |
+| `kubeconfig` | Get, refresh, list local kubeconfigs; install exec contexts |
 | `auth exec` | Internal exec credential helper (used by exec contexts) |
 
 Run `kubectl sheep --help` for examples on every command.

@@ -11,7 +11,7 @@ All kubectl-sheep state lives under your home directory.
 | `~/.config/kubectl-sheep/keys/` | Encrypted tokens (keyring FileBackend) |
 | `~/.kube/sheep/<instance>/<cluster-id>.yaml` | Downloaded kubeconfigs |
 | `~/.kube/sheep/<instance>/<cluster-id>.meta.yaml` | Fetch metadata (name, timestamp) |
-| `~/.kube/config` | Target for merge operations (or `$KUBECONFIG`) |
+| `~/.kube/config` | Merged contexts (or first path in `$KUBECONFIG`) |
 
 ## instances.yaml
 
@@ -29,7 +29,7 @@ instances:
 
 | Variable | Effect |
 |----------|--------|
-| `KUBECONFIG` | Merge target when using `--merge` (first path if colon-separated list) |
+| `KUBECONFIG` | Merge target (first path if colon-separated list) |
 | `HOME` | Base for config and kubeconfig paths |
 
 ## Global flags
@@ -38,6 +38,14 @@ instances:
 |------|-------------|
 | `--no-input` | Disable interactive prompts |
 | `-h, --help` | Help with examples on every command |
+
+## Shell completion
+
+```bash
+source <(kubectl sheep completion bash)   # or zsh / fish
+```
+
+See [Install](install.md#shell-completion) for details.
 
 ## Development
 
