@@ -167,6 +167,10 @@ func newRancherInstanceAddCmd() *cobra.Command {
 				return fmt.Errorf("token must not be empty")
 			}
 
+			if storage == config.StorageEncrypted {
+				credentials.SetNextPassphraseHint("You'll be prompted again whenever you fetch kubeconfigs.")
+			}
+
 			store, err := credentials.NewStore(storage)
 			if err != nil {
 				return err
