@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync"
 
 	"github.com/ahoz/kubectl-sheep/internal/kubeconfig"
 	"github.com/ahoz/kubectl-sheep/internal/rancher"
@@ -17,67 +16,36 @@ type refreshResult struct {
 	err     error
 }
 
-func refreshClusters(ctx context.Context, instanceName string, client *rancher.Client, clusters []rancher.Cluster) []refreshResult {
-	jobs := make(chan rancher.Cluster)
-	results := make(chan refreshResult, len(clusters))
-
-	var wg sync.WaitGroup
-	for range fetchWorkers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for c := range jobs {
-				path, err := kubeconfig.KubeconfigPath(instanceName, c.ID)
-				if err != nil {
-					results <- refreshResult{cluster: c, err: err}
-					continue
-				}
-
-				var previous string
-				data, err := os.ReadFile(path)
-				if err != nil {
-					results <- refreshResult{cluster: c, err: fmt.Errorf("read existing kubeconfig: %w", err)}
-					continue
-				}
-				previous = string(data)
-
-				content, err := client.GenerateKubeconfig(ctx, c.ID)
-				if err != nil {
-					results <- refreshResult{cluster: c, err: err}
-					continue
-				}
-				if err := kubeconfig.Save(instanceName, c.ID, c.Name, content); err != nil {
-					results <- refreshResult{cluster: c, err: err}
-					continue
-				}
-				if err := mergeKubeconfig(instanceName, c.Name, content); err != nil {
-					results <- refreshResult{cluster: c, err: err}
-					continue
-				}
-
-				results <- refreshResult{
-					cluster: c,
-					changed: previous != content,
-					hint:    kubeconfig.TokenExpiryHint(content),
-				}
-			}
-		}()
-	}
-
-	go func() {
-		for _, c := range clusters {
-			jobs <- c
+func refreshClusters(ctx context.Context, instanceName string, client kubeconfigGenerator, clusters []rancher.Cluster) []refreshResult {
+	return runClusterJobs(clusters, fetchWorkers, func(c rancher.Cluster) refreshResult {
+		path, err := kubeconfig.KubeconfigPath(instanceName, c.ID)
+		if err != nil {
+			return refreshResult{cluster: c, err: err}
 		}
-		close(jobs)
-		wg.Wait()
-		close(results)
-	}()
 
-	collected := make([]refreshResult, 0, len(clusters))
-	for r := range results {
-		collected = append(collected, r)
-	}
-	return collected
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return refreshResult{cluster: c, err: fmt.Errorf("read existing kubeconfig: %w", err)}
+		}
+		previous := string(data)
+
+		content, err := client.GenerateKubeconfig(ctx, c.ID)
+		if err != nil {
+			return refreshResult{cluster: c, err: err}
+		}
+		if err := kubeconfig.Save(instanceName, c.ID, c.Name, content); err != nil {
+			return refreshResult{cluster: c, err: err}
+		}
+		if err := mergeKubeconfig(instanceName, c.Name, content); err != nil {
+			return refreshResult{cluster: c, err: err}
+		}
+
+		return refreshResult{
+			cluster: c,
+			changed: previous != content,
+			hint:    kubeconfig.TokenExpiryHint(content),
+		}
+	})
 }
 
 func printRefreshResults(w interface {
